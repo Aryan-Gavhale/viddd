@@ -1,0 +1,9 @@
+{
+  "nav": { "home": "होम", "jobs": "काम खोजें", "gigs": "सेवाएं देखें", "editors": "एडिटर खोजें", "pricing": "मूल्य", "login": "लॉग इन", "signup": "साइन अप", "dashboard": "डैशबोर्ड", "messages": "संदेश", "notifications": "सूचनाएं", "settings": "सेटिंग्स", "logout": "लॉग आउट", "postJob": "काम पोस्ट करें", "myGigs": "मेरी सेवाएं", "portfolio": "पोर्टफोलियो" },
+  "common": { "search": "खोजें", "filter": "फ़िल्टर", "sort": "क्रमबद्ध", "loading": "लोड हो रहा है...", "noResults": "कोई परिणाम नहीं मिला", "save": "सहेजें", "cancel": "रद्द करें", "delete": "हटाएं", "edit": "संपादित करें", "create": "बनाएं", "submit": "जमा करें", "back": "पीछे", "next": "आगे", "viewAll": "सभी देखें", "readMore": "और पढ़ें", "apply": "आवेदन करें", "hire": "नियुक्त करें", "close": "बंद करें" },
+  "auth": { "email": "ईमेल", "password": "पासवर्ड", "login": "लॉग इन करें", "signup": "साइन अप करें", "forgotPassword": "पासवर्ड भूल गए?", "rememberMe": "मुझे याद रखें", "noAccount": "खाता नहीं है?", "hasAccount": "पहले से खाता है?" },
+  "home": { "hero": "वीडियो एडिटिंग फ्रीलांस प्लेटफॉर्म", "subtitle": "दुनिया भर के बेहतरीन वीडियो एडिटर्स से जुड़ें। कम शुल्क, बेहतर उपकरण।", "getStarted": "शुरू करें", "howItWorks": "यह कैसे काम करता है", "popularServices": "लोकप्रिय सेवाएं", "trending": "ट्रेंडिंग सेवाएं" },
+  "dashboard": { "welcome": "वापसी पर स्वागत है", "activeOrders": "सक्रिय ऑर्डर", "earnings": "कमाई", "completedProjects": "पूर्ण प्रोजेक्ट", "pendingReviews": "लंबित समीक्षाएं" },
+  "footer": { "about": "हमारे बारे में", "contact": "संपर्क", "privacy": "गोपनीयता नीति", "terms": "सेवा की शर्तें", "faq": "सामान्य प्रश्न" },
+  "language": { "en": "अंग्रेजी", "es": "स्पेनिश", "fr": "फ्रेंच", "hi": "हिंदी" }
+}

@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+logs
+*.log
+.env
+.env.local
+.env.*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json

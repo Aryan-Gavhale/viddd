@@ -1,0 +1,83 @@
+/* Animation styles for the profile page */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.empty-state {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.empty-state-icon {
+  animation: float 3s ease-in-out infinite;
+}
+
+.modal-overlay {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  animation: scaleIn 0.4s cubic-bezier(0.21, 1.02, 0.73, 1);
+}
+
+.portfolio-item {
+  animation: slideIn 0.5s ease-out forwards;
+}
+
+.badge-item {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease-out;
+}

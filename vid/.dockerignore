@@ -1,0 +1,14 @@
+# When using `docker build -f vid/Dockerfile .` the context is the repo root;
+# prefer the root `.dockerignore` for exclusions. These patterns apply if the
+# context is set to `vid/` (not used by the provided docker-compose).
+
+node_modules
+dist
+logs
+.git
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.DS_Store

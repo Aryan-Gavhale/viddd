@@ -1,0 +1,13 @@
+# When using `docker build -f vid-frontend/Dockerfile .` the context is the repo
+# root; prefer the root `.dockerignore`. These apply if context is `vid-frontend/`.
+
+node_modules
+dist
+.vite
+.git
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.DS_Store

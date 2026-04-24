@@ -1,0 +1,9 @@
+{
+  "nav": { "home": "Inicio", "jobs": "Buscar Trabajos", "gigs": "Explorar Servicios", "editors": "Buscar Editores", "pricing": "Precios", "login": "Iniciar Sesión", "signup": "Registrarse", "dashboard": "Panel", "messages": "Mensajes", "notifications": "Notificaciones", "settings": "Ajustes", "logout": "Cerrar Sesión", "postJob": "Publicar Trabajo", "myGigs": "Mis Servicios", "portfolio": "Portafolio" },
+  "common": { "search": "Buscar", "filter": "Filtrar", "sort": "Ordenar", "loading": "Cargando...", "noResults": "No se encontraron resultados", "save": "Guardar", "cancel": "Cancelar", "delete": "Eliminar", "edit": "Editar", "create": "Crear", "submit": "Enviar", "back": "Atrás", "next": "Siguiente", "viewAll": "Ver Todo", "readMore": "Leer Más", "apply": "Aplicar", "hire": "Contratar", "close": "Cerrar" },
+  "auth": { "email": "Correo electrónico", "password": "Contraseña", "login": "Iniciar Sesión", "signup": "Registrarse", "forgotPassword": "¿Olvidaste tu contraseña?", "rememberMe": "Recordarme", "noAccount": "¿No tienes cuenta?", "hasAccount": "¿Ya tienes cuenta?" },
+  "home": { "hero": "La Plataforma Freelance de Edición de Video", "subtitle": "Conecta con los mejores editores de video del mundo. Tarifas más bajas, mejores herramientas.", "getStarted": "Comenzar", "howItWorks": "Cómo Funciona", "popularServices": "Servicios Populares", "trending": "Servicios Tendencia" },
+  "dashboard": { "welcome": "Bienvenido de nuevo", "activeOrders": "Pedidos Activos", "earnings": "Ganancias", "completedProjects": "Proyectos Completados", "pendingReviews": "Revisiones Pendientes" },
+  "footer": { "about": "Sobre Nosotros", "contact": "Contacto", "privacy": "Política de Privacidad", "terms": "Términos de Servicio", "faq": "Preguntas Frecuentes" },
+  "language": { "en": "Inglés", "es": "Español", "fr": "Francés", "hi": "Hindi" }
+}

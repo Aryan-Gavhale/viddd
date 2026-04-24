@@ -1,0 +1,9 @@
+{
+  "nav": { "home": "Accueil", "jobs": "Trouver des Missions", "gigs": "Parcourir les Services", "editors": "Trouver des Éditeurs", "pricing": "Tarifs", "login": "Connexion", "signup": "S'inscrire", "dashboard": "Tableau de bord", "messages": "Messages", "notifications": "Notifications", "settings": "Paramètres", "logout": "Déconnexion", "postJob": "Publier une Mission", "myGigs": "Mes Services", "portfolio": "Portfolio" },
+  "common": { "search": "Rechercher", "filter": "Filtrer", "sort": "Trier", "loading": "Chargement...", "noResults": "Aucun résultat trouvé", "save": "Enregistrer", "cancel": "Annuler", "delete": "Supprimer", "edit": "Modifier", "create": "Créer", "submit": "Soumettre", "back": "Retour", "next": "Suivant", "viewAll": "Tout Voir", "readMore": "Lire Plus", "apply": "Postuler", "hire": "Engager", "close": "Fermer" },
+  "auth": { "email": "E-mail", "password": "Mot de passe", "login": "Se Connecter", "signup": "S'inscrire", "forgotPassword": "Mot de passe oublié ?", "rememberMe": "Se souvenir de moi", "noAccount": "Pas de compte ?", "hasAccount": "Déjà un compte ?" },
+  "home": { "hero": "La Plateforme Freelance de Montage Vidéo", "subtitle": "Connectez-vous avec les meilleurs monteurs vidéo du monde. Frais réduits, meilleurs outils.", "getStarted": "Commencer", "howItWorks": "Comment ça Marche", "popularServices": "Services Populaires", "trending": "Services Tendance" },
+  "dashboard": { "welcome": "Bon retour", "activeOrders": "Commandes Actives", "earnings": "Revenus", "completedProjects": "Projets Terminés", "pendingReviews": "Révisions en Attente" },
+  "footer": { "about": "À Propos", "contact": "Contact", "privacy": "Politique de Confidentialité", "terms": "Conditions d'Utilisation", "faq": "FAQ" },
+  "language": { "en": "Anglais", "es": "Espagnol", "fr": "Français", "hi": "Hindi" }
+}
