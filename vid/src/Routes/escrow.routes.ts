@@ -12,9 +12,18 @@ const disputeSchema = Joi.object({
 
 export default async function routes(fastify: FastifyInstance, _opts: FastifyPluginOptions): Promise<void> {
   fastify.get("/:orderId", { preHandler: [authenticateToken], handler: wrapHandler(getEscrowStatus) });
-  fastify.post("/:orderId/release", { preHandler: [authenticateWithDB], handler: wrapHandler(releaseEscrow) });
-  fastify.post("/:orderId/request-release", { preHandler: [authenticateWithDB], handler: wrapHandler(requestEscrowRelease) });
+  fastify.post("/:orderId/release", {
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    preHandler: [authenticateWithDB],
+    handler: wrapHandler(releaseEscrow),
+  });
+  fastify.post("/:orderId/request-release", {
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    preHandler: [authenticateWithDB],
+    handler: wrapHandler(requestEscrowRelease),
+  });
   fastify.post("/:orderId/dispute", {
+    config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
     preHandler: [authenticateWithDB, validateBody(disputeSchema)],
     handler: wrapHandler(disputeEscrow),
   });

@@ -70,6 +70,127 @@ async function expandReactionsOnMessages(rows: MessageRowMut[]) {
   }
 }
 
+/**
+ * Clean job-scoped HTTP send endpoint. Mirrors the socket flow exactly so it
+ * can be used as a fallback when the websocket isn't connected. Returns the
+ * persisted message in the same shape the socket broadcasts.
+ */
+const sendJobMessage: ControllerHandler = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return next(new ApiError(401, "Unauthorized"));
+    }
+    const senderId = req.user.id;
+    const jobId = parseInt(String((req.params as Record<string, string>).jobId), 10);
+    if (!Number.isFinite(jobId) || jobId <= 0) {
+      return next(new ApiError(400, "Invalid jobId"));
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const content = (body.content == null ? "" : String(body.content)).slice(0, 5000);
+    const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+    const replyToId = body.replyToId ? String(body.replyToId) : null;
+    const clientId = body.clientId ? String(body.clientId) : null;
+
+    if (!content.trim() && attachments.length === 0) {
+      return next(new ApiError(400, "Message content or attachments are required"));
+    }
+
+    const job = await sqlOne(
+      `SELECT posted_by_id AS "postedById", freelancer_id AS "freelancerId"
+         FROM "Job" WHERE id = $1 AND "deletedAt" IS NULL`,
+      [jobId]
+    );
+    if (!job) return next(new ApiError(404, "Job not found"));
+    const postedById = Number(job.postedById);
+    const freelancerId = job.freelancerId == null ? null : Number(job.freelancerId);
+    if (senderId !== postedById && senderId !== freelancerId) {
+      return next(new ApiError(403, "You are not part of this conversation"));
+    }
+    const receiverId = senderId === postedById ? freelancerId : postedById;
+
+    if (replyToId) {
+      const parent = await sqlOne(
+        `SELECT id, "jobId" FROM "Message" WHERE id = $1`,
+        [replyToId]
+      );
+      if (!parent || Number(parent.jobId) !== jobId) {
+        return next(new ApiError(400, "Invalid reply target"));
+      }
+    }
+
+    const messageId = randomUUID();
+    const inserted = (await sqlOne(
+      `INSERT INTO "Message"
+         ("id","jobId","senderId","receiverId","content",
+          "attachments","replyTo","timestamp","reactions")
+       VALUES (
+         $1,$2,$3,$4,$5,
+         COALESCE(
+           (SELECT array_agg(value) FROM jsonb_array_elements($6::jsonb)),
+           ARRAY[]::jsonb[]
+         ),
+         $7, NOW(), '[]'::jsonb
+       )
+       RETURNING *`,
+      [
+        messageId,
+        jobId,
+        senderId,
+        receiverId ?? senderId,
+        content,
+        JSON.stringify(attachments),
+        replyToId,
+      ]
+    )) as MessageRowMut | null;
+
+    if (!inserted) return next(new ApiError(500, "Failed to persist message"));
+
+    const sender = await sqlOne(
+      `SELECT id, firstname, lastname, "profilePicture" FROM "User" WHERE id = $1`,
+      [senderId]
+    );
+
+    const formatted = {
+      id: inserted.id,
+      jobId: inserted.jobId,
+      senderId,
+      sender: {
+        id: senderId,
+        firstname: sender?.firstname,
+        lastname: sender?.lastname,
+        name: `${sender?.firstname || ""} ${sender?.lastname || ""}`.trim(),
+        avatar: sender?.profilePicture || null,
+        profilePicture: sender?.profilePicture || null,
+      },
+      content: inserted.content,
+      attachments: Array.isArray(inserted.attachments) ? inserted.attachments : [],
+      replyTo: inserted.replyTo,
+      timestamp: inserted.timestamp instanceof Date
+        ? inserted.timestamp.toISOString()
+        : inserted.timestamp,
+      reactions: [],
+    };
+
+    // Broadcast to the room so the *other* party sees it instantly even though
+    // this came in over HTTP and not the websocket.
+    try {
+      const io = getIO();
+      io.to(ROOMS.job(jobId)).emit(EVENTS.NEW_MESSAGE, formatted);
+    } catch (e) {
+      logger.warn(`HTTP message broadcast skipped: ${(e as Error).message}`);
+    }
+
+    return res.status(201).json(
+      new ApiResponse(201, { clientId, message: formatted }, "Message sent")
+    );
+  } catch (e) {
+    const err = e as Error;
+    logger.error(`sendJobMessage: ${err.message}\n${err.stack}`);
+    return next(new ApiError(500, `Failed to send message: ${err.message}`));
+  }
+};
+
 const sendMessage: ControllerHandler = async (req, res, next) => {
   try {
     if (!req.user || !req.user.id) {
@@ -779,8 +900,9 @@ const getMessagesByJobId: ControllerHandler = async (req, res, next) => {
       )
     );
   } catch (error) {
-    logger.error("Error retrieving job messages: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve job messages"));
+    const err = error as Error;
+    logger.error(`Error retrieving job messages: ${err.message}\n${err.stack}`);
+    return next(new ApiError(500, `Failed to retrieve job messages: ${err.message}`));
   }
 };
 
@@ -875,6 +997,7 @@ const getMessagesByOrderId: ControllerHandler = async (req, res, next) => {
 
 export {
   sendMessage,
+  sendJobMessage,
   getMessages,
   getMessagesByJob,
   markMessageAsRead,

@@ -82,7 +82,7 @@ export default function CreateGigForm({ isUpdate }) {
       const fetchGigData = async () => {
         try {
           setIsLoading(true);
-          const response = await axiosInstance.get(`/gig/${gigId}`);
+          const response = await axiosInstance.get(`/gigs/${gigId}`);
           const gig = response.data.data;
           
           // Transform the gig data to match the form structure
@@ -344,19 +344,19 @@ export default function CreateGigForm({ isUpdate }) {
 
       let response;
       if (isUpdate) {
-        response = await axiosInstance.put(`/gig/${gigId}`, gigData);
+        response = await axiosInstance.put(`/gigs/${gigId}`, gigData);
       } else {
-        response = await axiosInstance[status === "ACTIVE" ? "post" : "post"]("/gig", gigData);
+        response = await axiosInstance[status === "ACTIVE" ? "post" : "post"]("/gigs", gigData);
       }
 
       if (status === "ACTIVE") {
         setResultStatus("success");
         setShowResultModal(true);
         setTimeout(() => {
-          navigate("/gigs-dashboard");
+          navigate("/editor/gigs");
         }, 2000);
       } else {
-        navigate("/gigs-dashboard");
+        navigate("/editor/gigs");
       }
     } catch (error) {
       console.error(`Error ${status === "ACTIVE" ? "publishing" : "saving"} gig:`, error);
@@ -509,7 +509,7 @@ export default function CreateGigForm({ isUpdate }) {
             </div>
 
             <div className="flex justify-between pt-6">
-              <Link to="/gigs-dashboard" className="text-gray-500 hover:text-gray-700 font-medium">
+              <Link to="/editor/gigs" className="text-gray-500 hover:text-gray-700 font-medium">
                 Cancel
               </Link>
               <button
@@ -1092,7 +1092,7 @@ export default function CreateGigForm({ isUpdate }) {
 
             <div className="flex flex-wrap md:flex-nowrap justify-between gap-4 pt-8">
               <div className="flex gap-3 w-full md:w-auto">
-                <Link to="/gigs-dashboard" className="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium">
+                <Link to="/editor/gigs" className="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium">
                   Cancel
                 </Link>
                 <button
@@ -1199,7 +1199,7 @@ export default function CreateGigForm({ isUpdate }) {
       <header className="border-b bg-white dark:bg-gray-800 dark:border-gray-700 py-4">
         <div className="container max-w-6xl mx-auto px-4">
           <div className="flex items-center">
-            <Link to="/gigs-dashboard" className="text-gray-500 hover:text-gray-700 mr-4">
+            <Link to="/editor/gigs" className="text-gray-500 hover:text-gray-700 mr-4">
               <ChevronLeft className="w-5 h-5" />
             </Link>
             <h1 className="text-xl font-bold">{isUpdate ? "Update Gig" : "Create New Gig"}</h1>

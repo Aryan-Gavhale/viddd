@@ -140,7 +140,7 @@ export default function BriefWizard() {
         await axiosInstance.post("/briefs", { ...brief, status: "SUBMITTED" });
       }
       toast.success("Brief submitted successfully!");
-      navigate("/client-dashboard");
+      navigate("/client/dashboard");
     } catch {
       toast.error("Failed to submit brief");
     } finally {

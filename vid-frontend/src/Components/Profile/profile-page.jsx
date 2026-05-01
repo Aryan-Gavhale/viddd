@@ -47,7 +47,7 @@ import { toast } from "react-toastify"
 import { useSelector } from "react-redux"
 import "./animation.css"
 import axiosInstance from "../../utils/axios"
-import FreelancerPortfolio from "./Portfolio/FreelancerPortfolio"
+import FreelancerPortfolio from "../Portfolio/FreelancerPortfolio"
 
 // Helper function to replace the cn utility
 function cn(...classes) {
@@ -105,11 +105,13 @@ export default function ProfilePage() {
     timeOff: [],
   })
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [isLoading, setIsLoading] = useState(true)
   const fileInputRef = useRef(null)
 
   // Fetch profile data
   useEffect(() => {
     const fetchProfile = async () => {
+      setIsLoading(true)
       try {
         const endpoint = freelancerId ? `/users/profile/${freelancerId}` : "/users/me"
         console.log("Fetching profile - Endpoint:", endpoint)
@@ -227,6 +229,8 @@ export default function ProfilePage() {
       } catch (error) {
         console.error("Error fetching profile:", error)
         toast.error(error.response?.data?.message || "Failed to load profile")
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -356,7 +360,40 @@ export default function ProfilePage() {
   }
 
   const handleCreateGig = () => {
-    navigate("/create-gig")
+    navigate("/editor/gigs/new")
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 animate-pulse">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="h-48 bg-gradient-to-r from-purple-200 to-indigo-200" />
+            <div className="px-6 pb-6">
+              <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-5 -mt-16">
+                <div className="h-32 w-32 rounded-full bg-gray-300 border-4 border-white shadow-lg" />
+                <div className="mt-6 flex-1 space-y-3">
+                  <div className="h-7 w-64 bg-gray-300 rounded" />
+                  <div className="h-4 w-48 bg-gray-200 rounded" />
+                  <div className="h-4 w-32 bg-gray-200 rounded" />
+                </div>
+              </div>
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="h-24 bg-gray-100 rounded-xl" />
+                <div className="h-24 bg-gray-100 rounded-xl" />
+                <div className="h-24 bg-gray-100 rounded-xl" />
+              </div>
+              <div className="mt-8 space-y-3">
+                <div className="h-6 w-40 bg-gray-200 rounded" />
+                <div className="h-4 w-full bg-gray-100 rounded" />
+                <div className="h-4 w-5/6 bg-gray-100 rounded" />
+                <div className="h-4 w-4/6 bg-gray-100 rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -761,7 +798,7 @@ export default function ProfilePage() {
                   </div>
                   {isOwner && (
                     <Link
-                      to="/portfolio-manager"
+                      to="/editor/portfolio"
                       className="px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex items-center shadow-sm"
                     >
                       <Plus className="w-4 h-4 mr-2" />

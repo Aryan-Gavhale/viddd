@@ -1,195 +1,140 @@
-// src/components/JobApplicants.jsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
-import { XCircle, CheckCircle, Eye, Star, Calendar, DollarSign, MessageCircle } from "lucide-react";
+import { openChatWidget } from "../../hooks/useChat";
+import {
+  XCircle,
+  CheckCircle,
+  Eye,
+  Star,
+  Calendar,
+  IndianRupee,
+  MessageCircle,
+  ArrowLeft,
+  Briefcase,
+  Clock,
+  MapPin,
+} from "lucide-react";
+
+const SORT_OPTIONS = [
+  { id: "createdAt", label: "Most Recent" },
+  { id: "rating", label: "Highest Rated" },
+  { id: "experience", label: "Experience" },
+];
 
 export default function JobApplicants() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [applicants, setApplicants] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDirection, setSortDirection] = useState("desc");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  // Helper function to log errors
-  const logError = (context, error) => {
-    console.error(`[JobApplicants] ${context}:`, {
-      status: error.response?.status,
-      message: error.message,
-      data: error.response?.data,
-    });
-  };
-
-  // Sorting priorities
-  const badgePriority = { gold: 3, silver: 2, bronze: 1, none: 0 };
-  const preferencePriority = { "full-time": 3, "part-time": 2, "one-time": 1, none: 0 };
-
-  // Sort applicants
-  const sortApplicants = (applicantsToSort) => {
-    return [...applicantsToSort].sort((a, b) => {
-      let compare = 0;
+  const sortApplicants = (list) => {
+    const experienceWeight = { EXPERT: 3, INTERMEDIATE: 2, ENTRY: 1 };
+    return [...list].sort((a, b) => {
+      let cmp = 0;
       if (sortBy === "rating") {
-        compare = (b.freelancer.rating || 0) - (a.freelancer.rating || 0);
-      } else if (sortBy === "badge") {
-        compare = badgePriority[b.freelancer.freelancerProfile.badge || "none"] - badgePriority[a.freelancer.freelancerProfile.badge || "none"];
-      } else if (sortBy === "freelancingPreference") {
-        compare = preferencePriority[b.freelancer.freelancerProfile.freelancingPreference || "none"] - preferencePriority[a.freelancer.freelancerProfile.freelancingPreference || "none"];
-      } else if (sortBy === "createdAt") {
-        compare = new Date(b.createdAt) - new Date(a.createdAt);
+        cmp = (b.freelancer?.rating || 0) - (a.freelancer?.rating || 0);
+      } else if (sortBy === "experience") {
+        const ae = experienceWeight[a.freelancer?.freelancerProfile?.experienceLevel] || 0;
+        const be = experienceWeight[b.freelancer?.freelancerProfile?.experienceLevel] || 0;
+        cmp = be - ae;
+      } else {
+        cmp = new Date(b.createdAt) - new Date(a.createdAt);
       }
-      return sortDirection === "asc" ? -compare : compare;
+      return sortDirection === "asc" ? -cmp : cmp;
     });
   };
 
-  // Fetch job details and applicants
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
 
-        // Fetch job details
-        console.log(`[JobApplicants] Fetching job: ${jobId}`);
-        const jobResponse = await axiosInstance.get(`/jobs/${jobId}`);
-        console.log("[JobApplicants] Job response:", JSON.stringify(jobResponse.data, null, 2));
-        const jobData = jobResponse.data.data?.job || jobResponse.data.data;
-        if (!jobData) {
-          throw new Error("Job not found");
-        }
-        setJob(jobData);
+      const jobResponse = await axiosInstance.get(`/jobs/${jobId}`);
+      const jobData = jobResponse.data.data?.job || jobResponse.data.data;
+      if (!jobData) throw new Error("Job not found");
+      setJob(jobData);
 
-        // Fetch applicants
-        console.log(`[JobApplicants] Fetching applicants for job: ${jobId}`);
-        const applicantsResponse = await axiosInstance.get(`/jobs/${jobId}/applications`);
-        console.log("[JobApplicants] Applicants response:", JSON.stringify(applicantsResponse.data, null, 2));
-
-        const applications = Array.isArray(applicantsResponse.data.data) ? applicantsResponse.data.data : [];
-        console.log("[JobApplicants] Parsed applications:", applications);
-
-        if (!Array.isArray(applications)) {
-          console.warn("[JobApplicants] Applications is not an array:", applications);
-          setApplicants([]);
-          toast.warn("No valid applicant data received.");
-          return;
-        }
-
-        const fetchedApplicants = applications.map((app) => ({
-          id: app.id,
-          userId: app.freelancer?.id,
-          freelancerId: app.freelancerId,
-          name: app.freelancer ? `${app.freelancer.firstname} ${app.freelancer.lastname}`.trim() : `Applicant #${app.freelancerId}`,
-          email: app.freelancer?.email || "N/A",
-          coverLetter: app.aboutFreelancer || app.proposal || "No cover letter provided",
-          portfolioItems: Array.isArray(app.portfolioItems) ? app.portfolioItems : [],
-          createdAt: app.createdAt ? new Date(app.createdAt).toLocaleDateString("en-US") : "N/A",
-          status: app.status ? app.status.toLowerCase() : "pending",
-          price: app.price || jobData.budgetMin || 0,
-          deliveryTime: app.deliveryTime || "N/A",
-          skills: app.skills || [],
-          freelancer: {
-            id: app.freelancer?.id,
-            rating: app.freelancer?.rating || 0,
-            freelancerProfile: {
-              badge: app.freelancer?.freelancerProfile?.badge || "none",
-              freelancingPreference: app.freelancer?.freelancerProfile?.freelancingPreference || "none",
-            },
-          },
-        }));
-
-        console.log("[JobApplicants] Mapped applicants:", fetchedApplicants);
-        setApplicants(fetchedApplicants);
-
-        if (fetchedApplicants.length === 0) {
-          toast.warn("No applicants found for this job.");
-        }
-      } catch (error) {
-        logError("Data fetch", error);
-        const status = error.response?.status;
-        if (status === 401 || status === 403) {
-          toast.error("Session expired. Please log in again.");
-          navigate("/login");
-        } else if (status === 404) {
-          toast.error("Job or applications not found.");
-          navigate("/client-dashboard/shortlist");
-        } else {
-          toast.error("Failed to load data. Please try again.");
-          navigate("/client-dashboard/shortlist");
-        }
-      } finally {
-        setIsLoading(false);
+      const applicantsResponse = await axiosInstance.get(`/jobs/${jobId}/applications`);
+      const apps =
+        applicantsResponse.data.data?.applications ||
+        applicantsResponse.data.data ||
+        [];
+      setApplicants(Array.isArray(apps) ? apps : []);
+    } catch (error) {
+      console.error("[JobApplicants] Fetch error:", error);
+      const status = error.response?.status;
+      if (status === 401) {
+        toast.error("Please log in to view applicants.");
+        navigate("/login");
+      } else if (status === 403) {
+        toast.error("You are not authorized to view these applicants.");
+        navigate("/client/jobs");
+      } else if (status === 404) {
+        toast.error("Job not found.");
+        navigate("/client/jobs");
+      } else {
+        toast.error(error.response?.data?.message || "Failed to load applicants.");
       }
-    };
-
-    fetchData();
+    } finally {
+      setIsLoading(false);
+    }
   }, [jobId, navigate]);
 
-  // Handle select (hire) applicant
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   const handleConfirmSelect = async () => {
+    if (!selectedApplicant) return;
+    const freelancerId = selectedApplicant.freelancerId || selectedApplicant.freelancer?.id;
+    if (!freelancerId) {
+      toast.error("Missing freelancer information.");
+      return;
+    }
+    setActionLoading(`hire-${selectedApplicant.id}`);
     try {
-      console.log(`[JobApplicants] Selecting applicant:`, {
-        jobId,
-        freelancerId: selectedApplicant.freelancer.id
-      });
-
-      const response = await axiosInstance.post(`/jobs/${jobId}/accept`, {
-        freelancerId: selectedApplicant.freelancer.id
-      });
-
-      console.log('[JobApplicants] Selection response:', response.data);
-
-      if (response.data.success) {
-        // Update local state
-        setApplicants(prevApplicants => 
-          prevApplicants.map(app => ({
-            ...app,
-            status: app.freelancer.id === selectedApplicant.freelancer.id ? "accepted" : "rejected"
-          }))
-        );
-
-        // Close modal
-        setShowConfirmModal(false);
-        setSelectedApplicant(null);
-
-        // Show success message
-        toast.success("Applicant selected successfully! All other applicants have been notified.");
-        // Redirect to ProjectTracker Active tab after a short delay
-        setTimeout(() => {
-          navigate('/client-dashboard?tab=active');
-        }, 2000);
-      } else {
-        throw new Error(response.data.message || 'Failed to select applicant');
-      }
+      await axiosInstance.post(`/jobs/${jobId}/accept`, { freelancerId });
+      toast.success("Applicant hired. Other applicants have been notified.");
+      setShowConfirmModal(false);
+      setSelectedApplicant(null);
+      await fetchData();
+      setTimeout(() => navigate("/client/dashboard?tab=active"), 1500);
     } catch (error) {
-      console.error("[JobApplicants] Error selecting applicant:", error);
-      const errorMessage = error.response?.data?.message || error.message || "Failed to select applicant. Please try again.";
-      toast.error(errorMessage);
-      // Keep the modal open if there's an error
-      setShowConfirmModal(true);
+      console.error("[JobApplicants] Hire error:", error);
+      toast.error(error.response?.data?.message || "Failed to hire applicant.");
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  // Handle reject applicant
-  const handleRemove = async (applicantId) => {
+  const handleReject = async (applicant) => {
+    const freelancerId = applicant.freelancerId || applicant.freelancer?.id;
+    if (!freelancerId) {
+      toast.error("Missing freelancer information.");
+      return;
+    }
+    setActionLoading(`reject-${applicant.id}`);
     try {
-      console.log(`[JobApplicants] Rejecting applicant ${applicantId} for job ${jobId}`);
-      await axiosInstance.patch(`/applications/${applicantId}/status`, { status: "REJECTED" });
-      setApplicants((prev) =>
-        prev.map((app) => (app.id === applicantId ? { ...app, status: "rejected" } : app))
-      );
-      toast.success("Applicant rejected successfully");
+      await axiosInstance.post(`/jobs/${jobId}/reject`, { freelancerId });
+      toast.success("Applicant rejected.");
+      await fetchData();
     } catch (error) {
-      logError(`Reject applicant ${applicantId}`, error);
-      toast.error("Failed to reject applicant. Please try again.");
+      console.error("[JobApplicants] Reject error:", error);
+      toast.error(error.response?.data?.message || "Failed to reject applicant.");
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  // Handle sort change
   const handleSortChange = (newSortBy) => {
     if (newSortBy === sortBy) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -199,208 +144,292 @@ export default function JobApplicants() {
     }
   };
 
-  // Handle view profile
   const handleViewProfile = (freelancerId) => {
-    navigate(`/freelancerProfile/${freelancerId}`);
+    navigate(`/freelancers/${freelancerId}`);
   };
 
-  // Handle chat
-  const handleChat = (freelancerId) => {
-    console.log(`[JobApplicants] Starting chat with freelancer ${freelancerId}`);
-    navigate(`/messages?freelancerId=${freelancerId}`);
+  const handleChat = (applicant) => {
+    if (!jobId) return;
+    const freelancerId = applicant?.freelancerId || applicant?.freelancer?.id;
+    if (!freelancerId) return;
+    openChatWidget(Number(jobId), {
+      id: freelancerId,
+      firstname: applicant?.freelancer?.firstname,
+      lastname: applicant?.freelancer?.lastname,
+      avatar: applicant?.freelancer?.profilePicture,
+    });
   };
 
-  // Sorted applicants
-  const sortedApplicants = sortApplicants(applicants.filter((applicant) => applicant.status !== "rejected"));
+  const visibleApplicants = sortApplicants(
+    applicants.filter((a) => a.status !== "REJECTED")
+  );
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 animate-pulse">
+        <div className="h-10 w-1/3 bg-gray-200 rounded mb-6" />
+        <div className="h-32 bg-gray-100 rounded-2xl mb-6" />
+        <div className="space-y-4">
+          <div className="h-40 bg-gray-100 rounded-2xl" />
+          <div className="h-40 bg-gray-100 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Job Applicants</h1>
+      <button
+        onClick={() => navigate("/client/jobs")}
+        className="mb-6 flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-colors text-sm font-medium"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to My Jobs
+      </button>
+
+      <h1 className="text-3xl font-bold mb-6">Job Applicants</h1>
+
       {job && (
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">{job.title}</h2>
-          <div className="flex items-center space-x-6 text-sm text-gray-500 mt-2">
-            <div className="flex items-center">
-              <Calendar className="w-4 h-4 mr-1" />
-              Posted: {new Date(job.createdAt).toLocaleDateString("en-US")}
+          <h2 className="text-xl font-semibold text-gray-900 mb-3">{job.title}</h2>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500">
+            <div className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" />
+              Posted {new Date(job.createdAt).toLocaleDateString()}
             </div>
-            <div className="flex items-center">
-              <DollarSign className="w-4 h-4 mr-1" />
-              Budget: ₹{Number(job.budgetMin || 0).toLocaleString("en-IN")} - ₹{Number(job.budgetMax || 0).toLocaleString("en-IN")}
-            </div>
+            {(job.budgetMin || job.budgetMax) && (
+              <div className="flex items-center gap-1">
+                <IndianRupee className="w-4 h-4" />
+                Budget ₹{Number(job.budgetMin || 0).toLocaleString("en-IN")} - ₹
+                {Number(job.budgetMax || 0).toLocaleString("en-IN")}
+              </div>
+            )}
+            {job.deadline && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                Deadline {new Date(job.deadline).toLocaleDateString()}
+              </div>
+            )}
+            {job.location && (
+              <div className="flex items-center gap-1">
+                <MapPin className="w-4 h-4" />
+                {job.location}
+              </div>
+            )}
+            {job.projectLength && (
+              <div className="flex items-center gap-1">
+                <Briefcase className="w-4 h-4" />
+                {job.projectLength.replace(/_/g, " ").toLowerCase()}
+              </div>
+            )}
           </div>
         </div>
       )}
-      {isLoading ? (
-        <div className="text-center py-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p>Loading applicants...</p>
+
+      {applicants.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
+          <p className="text-gray-500 text-lg">No applicants yet for this job.</p>
         </div>
-      ) : applicants.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">No applicants found for this job.</div>
       ) : (
         <div className="space-y-6">
-          {/* Sorting controls */}
-          <div className="flex gap-4 mb-6">
-            <button
-              onClick={() => handleSortChange("createdAt")}
-              className={`px-4 py-2 rounded ${
-                sortBy === "createdAt" ? "bg-purple-600 text-white" : "bg-gray-200"
-              }`}
-            >
-              Sort by Date {sortBy === "createdAt" && (sortDirection === "asc" ? "↑" : "↓")}
-            </button>
-            <button
-              onClick={() => handleSortChange("rating")}
-              className={`px-4 py-2 rounded ${sortBy === "rating" ? "bg-purple-600 text-white" : "bg-gray-200"}`}
-            >
-              Sort by Rating {sortBy === "rating" && (sortDirection === "asc" ? "↑" : "↓")}
-            </button>
-            <button
-              onClick={() => handleSortChange("badge")}
-              className={`px-4 py-2 rounded ${sortBy === "badge" ? "bg-purple-600 text-white" : "bg-gray-200"}`}
-            >
-              Sort by Badge {sortBy === "badge" && (sortDirection === "asc" ? "↑" : "↓")}
-            </button>
-            <button
-              onClick={() => handleSortChange("freelancingPreference")}
-              className={`px-4 py-2 rounded ${
-                sortBy === "freelancingPreference" ? "bg-purple-600 text-white" : "bg-gray-200"
-              }`}
-            >
-              Sort by Preference {sortBy === "freelancingPreference" && (sortDirection === "asc" ? "↑" : "↓")}
-            </button>
+          <div className="flex flex-wrap gap-3">
+            {SORT_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => handleSortChange(opt.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  sortBy === opt.id
+                    ? "bg-purple-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {opt.label} {sortBy === opt.id && (sortDirection === "asc" ? "↑" : "↓")}
+              </button>
+            ))}
           </div>
 
-          {/* Applicants list */}
-          {sortedApplicants.map((applicant) => (
-            <div key={applicant.id} className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-4 mb-2">
-                    <img
-                      src={applicant.freelancer?.avatar || "/placeholder.svg"}
-                      alt={applicant.name}
-                      className="w-10 h-10 rounded-full"
-                      onError={(e) => (e.target.src = "/placeholder.svg")}
-                    />
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{applicant.name}</h3>
-                      <p className="text-gray-600 text-sm">{applicant.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-6 text-sm text-gray-500 mt-2">
-                    <div className="flex items-center">
-                      <Star className="w-4 h-4 text-yellow-400 mr-1" />
-                      {applicant.freelancer.rating || 0}/5
-                    </div>
-                    <div className="flex items-center">
-                      <DollarSign className="w-4 h-4 mr-1" />
-                      ₹{Number(applicant.price || 0).toLocaleString("en-IN")}
-                    </div>
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-1" />
-                      Delivery: {applicant.deliveryTime}
-                    </div>
-                    <div className="flex items-center">
-                      <span>Applied: {applicant.createdAt}</span>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <h4 className="font-medium mb-2">Cover Letter:</h4>
-                    <p className="text-gray-700">{applicant.coverLetter}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {applicant.skills.map((skill, index) => (
-                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-lg">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => handleViewProfile(applicant.freelancerId)}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    aria-label={`View profile of ${applicant.name}`}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Profile
-                  </button>
-                  <button
-                    onClick={() => handleChat(applicant.freelancerId)}
-                    className="flex items-center px-4 py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                    aria-label={`Chat with ${applicant.name}`}
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Chat
-                  </button>
-                  {applicant.status === "pending" && (
-                    <>
-                      <button
-                        onClick={() => {
-                          setSelectedApplicant(applicant);
-                          setShowConfirmModal(true);
-                        }}
-                        className="flex items-center px-4 py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        aria-label={`Hire ${applicant.name}`}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Hire
-                      </button>
-                      <button
-                        onClick={() => handleRemove(applicant.id)}
-                        className="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        aria-label={`Reject ${applicant.name}`}
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </button>
-                    </>
-                  )}
-                  {applicant.status === "accepted" && (
-                    <span className="text-green-600 font-medium">Hired</span>
-                  )}
-                  {applicant.status === "rejected" && (
-                    <span className="text-red-600 font-medium">Rejected</span>
-                  )}
-                </div>
-              </div>
+          {visibleApplicants.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-gray-200">
+              <p className="text-gray-500">All remaining applicants have been processed.</p>
             </div>
-          ))}
+          ) : (
+            visibleApplicants.map((applicant) => {
+              const fname = applicant.freelancer
+                ? `${applicant.freelancer.firstname || ""} ${applicant.freelancer.lastname || ""}`.trim() ||
+                  `Applicant #${applicant.freelancerId}`
+                : `Applicant #${applicant.freelancerId}`;
+              const isPending = !applicant.status || applicant.status === "PENDING";
+              const isAccepted = applicant.status === "ACCEPTED";
+              const skills = applicant.freelancer?.freelancerProfile?.skills || [];
+              const profile = applicant.freelancer?.freelancerProfile || {};
+
+              return (
+                <div
+                  key={applicant.id}
+                  className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 shadow-sm"
+                >
+                  <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4 mb-3">
+                        {applicant.freelancer?.profilePicture ? (
+                          <img
+                            src={applicant.freelancer.profilePicture}
+                            alt={fname}
+                            className="w-12 h-12 rounded-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-white font-semibold">
+                            {fname.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">{fname}</h3>
+                          {profile.jobTitle && (
+                            <p className="text-gray-600 text-sm">{profile.jobTitle}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500 mb-4">
+                        {applicant.freelancer?.rating > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                            {applicant.freelancer.rating}/5
+                          </div>
+                        )}
+                        {profile.hourlyRate && (
+                          <div className="flex items-center gap-1">
+                            <IndianRupee className="w-4 h-4" />
+                            {Number(profile.hourlyRate).toLocaleString("en-IN")}/hr
+                          </div>
+                        )}
+                        {profile.experienceLevel && (
+                          <div className="flex items-center gap-1">
+                            <Briefcase className="w-4 h-4" />
+                            {profile.experienceLevel.toLowerCase()}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          Applied{" "}
+                          {applicant.createdAt
+                            ? new Date(applicant.createdAt).toLocaleDateString()
+                            : "—"}
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <h4 className="font-medium mb-2 text-sm">Cover Letter</h4>
+                        <p className="text-gray-700 bg-gray-50 rounded-lg p-3 text-sm">
+                          {applicant.aboutFreelancer || "No cover letter provided."}
+                        </p>
+                      </div>
+
+                      {Array.isArray(skills) && skills.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {skills.slice(0, 8).map((skill, idx) => (
+                            <span
+                              key={`${skill}-${idx}`}
+                              className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-lg"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2 min-w-[180px]">
+                      <button
+                        onClick={() =>
+                          handleViewProfile(applicant.freelancerId || applicant.freelancer?.id)
+                        }
+                        className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        View Profile
+                      </button>
+                      <button
+                        onClick={() => handleChat(applicant)}
+                        className="flex items-center justify-center px-4 py-2 text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors text-sm"
+                      >
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        Chat
+                      </button>
+
+                      {isPending ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedApplicant(applicant);
+                              setShowConfirmModal(true);
+                            }}
+                            className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Hire
+                          </button>
+                          <button
+                            onClick={() => handleReject(applicant)}
+                            disabled={actionLoading === `reject-${applicant.id}`}
+                            className="flex items-center justify-center px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+                          >
+                            <XCircle className="w-4 h-4 mr-2" />
+                            {actionLoading === `reject-${applicant.id}` ? "Rejecting..." : "Reject"}
+                          </button>
+                        </>
+                      ) : isAccepted ? (
+                        <span className="text-center py-2 text-green-600 font-medium bg-green-50 rounded-lg">
+                          Hired
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+      {showConfirmModal && selectedApplicant && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold mb-4">Confirm Hire</h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 mb-4">
               Are you sure you want to hire{" "}
-              <span className="font-semibold">{selectedApplicant?.name}</span>? This will:
+              <span className="font-semibold text-gray-900">
+                {selectedApplicant.freelancer
+                  ? `${selectedApplicant.freelancer.firstname || ""} ${selectedApplicant.freelancer.lastname || ""}`.trim()
+                  : `Applicant #${selectedApplicant.freelancerId}`}
+              </span>
+              ? This will:
             </p>
-            <ul className="list-disc list-inside mb-6 text-gray-600">
-              <li>Create an order for this job</li>
-              <li>Reject all other applicants</li>
-              <li>Send notifications to all applicants</li>
-              <li>Move this job to Active Projects</li>
+            <ul className="list-disc list-inside mb-6 text-gray-600 space-y-1 text-sm">
+              <li>Mark this job as Accepted and assign the freelancer</li>
+              <li>Reject all other applicants automatically</li>
+              <li>Send notifications to all candidates</li>
             </ul>
-            <div className="flex justify-end space-x-4">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowConfirmModal(false);
                   setSelectedApplicant(null);
                 }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                disabled={actionLoading?.startsWith("hire-")}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmSelect}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                disabled={actionLoading?.startsWith("hire-")}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
               >
-                Confirm Hire
+                {actionLoading?.startsWith("hire-") ? "Hiring..." : "Confirm Hire"}
               </button>
             </div>
           </div>

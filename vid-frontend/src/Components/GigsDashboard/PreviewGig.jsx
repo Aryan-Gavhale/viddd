@@ -69,10 +69,10 @@ export default function PreviewGig() {
     });
 
     try {
-      const response = await axiosInstance.post("/gig/", gigData);
+      const response = await axiosInstance.post("/gigs/", gigData);
 
       console.log(`Gig ${status === "ACTIVE" ? "published" : "saved as draft"} successfully:`, response.data);
-      navigate("/gigs-dashboard?success=true");
+      navigate("/editor/gigs?success=true");
     } catch (error) {
       console.error(`Error ${status === "ACTIVE" ? "publishing" : "saving"} gig:`, error);
       setSubmissionError(
@@ -245,7 +245,7 @@ export default function PreviewGig() {
         {/* Actions */}
         <div className="flex flex-wrap md:flex-nowrap justify-between gap-4 pt-6">
           <button
-            onClick={() => navigate("/create-gig", { state: { formData, step: 4 } })} // Return to Step 4
+            onClick={() => navigate("/editor/gigs/new", { state: { formData, step: 4 } })} // Return to Step 4
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
           >
             <ChevronLeft size={18} /> Edit

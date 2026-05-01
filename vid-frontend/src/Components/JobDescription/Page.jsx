@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
   Mail,
@@ -14,6 +15,7 @@ import {
   Star,
   CheckCircle,
   IndianRupee,
+  AlertTriangle,
   X,
 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
@@ -21,6 +23,7 @@ import axiosInstance from '../../utils/axios';
 export default function JobDescriptionPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const reduxUser = useSelector((state) => state.user);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -164,21 +167,9 @@ export default function JobDescriptionPage() {
       console.error('Error submitting application:', error);
       let errorMessage = 'Failed to submit application.';
       if (error.response) {
-        switch (error.response.status) {
-          case 401:
-            errorMessage = 'Please log in to apply.';
-            break;
-          case 403:
-            errorMessage = 'Only freelancers can apply for jobs.';
-            break;
-          case 400:
-            errorMessage = error.response.data.message || 'Invalid application data.';
-            break;
-          case 404:
-            errorMessage = 'Job not found.';
-            break;
-          default:
-            errorMessage = 'An error occurred. Please try again.';
+        errorMessage = error.response.data?.message || errorMessage;
+        if (error.response.status === 401) {
+          errorMessage = 'Please log in to apply.';
         }
       }
       toast.error(errorMessage);
@@ -229,6 +220,18 @@ export default function JobDescriptionPage() {
         >
           <X className="h-4 w-4 text-red-500" />
           Rejected
+        </button>
+      );
+    }
+
+    if (userRole === 'FREELANCER' && reduxUser && !reduxUser.isProfileComplete) {
+      return (
+        <button
+          onClick={() => navigate('/onboarding')}
+          className={`flex items-center justify-center gap-2 font-medium py-3 px-6 rounded-lg transition-colors bg-amber-500 hover:bg-amber-600 text-white ${className}`}
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Complete Profile to Apply
         </button>
       );
     }

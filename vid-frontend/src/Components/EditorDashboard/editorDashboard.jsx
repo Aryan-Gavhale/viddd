@@ -36,6 +36,7 @@ import { useSelector } from "react-redux";
 import { SkeletonDashboard } from "../Skeleton";
 
 export default function VideoEditorDashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("current");
   const [activeJobTab, setActiveJobTab] = useState("currentJobs");
   const [darkMode, setDarkMode] = useState(false);
@@ -76,9 +77,9 @@ export default function VideoEditorDashboard() {
           { name: "currentJobs", promise: axiosInstance.get("/jobs/current") },
           { name: "appliedJobs", promise: axiosInstance.get("/jobs/applied") },
           { name: "completedJobs", promise: axiosInstance.get("/jobs/completed") },
-          { name: "portfolioStats", promise: axiosInstance.get("/portfolio/stats") },
-          { name: "skills", promise: axiosInstance.get("/freelancer/skills") },
-          { name: "software", promise: axiosInstance.get("/freelancer/software") },
+          { name: "portfolioStats", promise: axiosInstance.get("/portfolios/stats") },
+          { name: "skills", promise: axiosInstance.get("/freelancers/skills") },
+          { name: "software", promise: axiosInstance.get("/freelancers/software") },
           { name: "earnings", promise: axiosInstance.get("/transactions/earnings") },
         ];
 
@@ -404,7 +405,7 @@ export default function VideoEditorDashboard() {
                         Current Orders
                       </h2>
                       <Link
-                        to="/create-gig"
+                        to="/editor/gigs/new"
                         className={`${
                           darkMode ? "bg-purple-500 hover:bg-purple-600" : "bg-purple-600 hover:bg-purple-700"
                         } text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-md`}
@@ -464,24 +465,10 @@ export default function VideoEditorDashboard() {
                             </div>
                           </div>
 
-                          <div className="mt-4 flex justify-between">
-                            <div className="flex -space-x-2">
-                              {[1, 2, 3].map((i) => (
-                                <div
-                                  key={i}
-                                  className="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 overflow-hidden"
-                                >
-                                  <img
-                                    src="/placeholder.svg?height=32&width=32"
-                                    alt="Team member"
-                                    width={32}
-                                    height={32}
-                                    className="object-cover"
-                                  />
-                                </div>
-                              ))}
-                            </div>
+                          <div className="mt-4 flex justify-end">
                             <button
+                              type="button"
+                              onClick={() => navigate(`/orders/${order.id}`)}
                               className={`${
                                 darkMode
                                   ? "text-purple-400 hover:text-purple-300"
@@ -831,6 +818,7 @@ export default function VideoEditorDashboard() {
                         Current Jobs
                       </h2>
                       <button
+                        onClick={() => navigate("/find-work")}
                         className={`${
                           darkMode ? "bg-purple-500 hover:bg-purple-600" : "bg-purple-600 hover:bg-purple-700"
                         } text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-md`}
@@ -890,24 +878,10 @@ export default function VideoEditorDashboard() {
                             </div>
                           </div>
 
-                          <div className="mt-4 flex justify-between">
-                            <div className="flex -space-x-2">
-                              {[1, 2, 3].map((i) => (
-                                <div
-                                  key={i}
-                                  className="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 overflow-hidden"
-                                >
-                                  <img
-                                    src="/placeholder.svg?height=32&width=32"
-                                    alt="Team member"
-                                    width={32}
-                                    height={32}
-                                    className="object-cover"
-                                  />
-                                </div>
-                              ))}
-                            </div>
+                          <div className="mt-4 flex justify-end">
                             <button
+                              type="button"
+                              onClick={() => navigate(`/editor/workspace?jobId=${job.id}`)}
                               className={`${
                                 darkMode
                                   ? "text-purple-400 hover:text-purple-300"

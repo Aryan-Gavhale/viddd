@@ -42,7 +42,7 @@ export function TimelineSection({ job }) {
   const fetchTimelineEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await axiosInstance.get(`/timeline/projects/${job.id}`)
+      const response = await axiosInstance.get(`/timelines/projects/${job.id}`)
       const data = response.data?.data || response.data || []
       setEvents(Array.isArray(data) ? data : [])
     } catch {
@@ -63,10 +63,10 @@ export function TimelineSection({ job }) {
     }
     try {
       if (editingEvent) {
-        await axiosInstance.put(`/timeline/${editingEvent.id}`, formData)
+        await axiosInstance.put(`/timelines/${editingEvent.id}`, formData)
         toast.success('Task updated')
       } else {
-        await axiosInstance.post(`/timeline/projects/${job.id}`, formData)
+        await axiosInstance.post(`/timelines/projects/${job.id}`, formData)
         toast.success('Task added')
       }
       await fetchTimelineEvents()
@@ -79,7 +79,7 @@ export function TimelineSection({ job }) {
   const handleDelete = async (eventId) => {
     if (!confirm('Delete this timeline task?')) return
     try {
-      await axiosInstance.delete(`/timeline/${eventId}`)
+      await axiosInstance.delete(`/timelines/${eventId}`)
       toast.success('Task deleted')
       await fetchTimelineEvents()
     } catch {
@@ -91,7 +91,7 @@ export function TimelineSection({ job }) {
     const current = event.status || (event.isCompleted ? 'COMPLETED' : 'PENDING')
     const next = current === 'COMPLETED' ? 'PENDING' : current === 'IN_PROGRESS' ? 'COMPLETED' : 'IN_PROGRESS'
     try {
-      await axiosInstance.put(`/timeline/${event.id}`, {
+      await axiosInstance.put(`/timelines/${event.id}`, {
         status: next,
         progress: next === 'COMPLETED' ? 100 : next === 'IN_PROGRESS' ? 50 : 0,
       })
@@ -174,7 +174,7 @@ export function TimelineSection({ job }) {
         <div className="flex items-center gap-2">
           {job?.id && (
             <Link
-              to={`/project-timeline/${job.id}`}
+              to={`/projects/${job.id}/timeline`}
               className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
               title="Open full Gantt view"
             >

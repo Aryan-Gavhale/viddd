@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
+import { openChatWidget } from "../../hooks/useChat";
 import { Filter, Eye, MessageCircle, UserPlus, Star, Calendar, DollarSign, Users } from "lucide-react";
 
 export default function Shortlist() {
@@ -145,7 +146,7 @@ export default function Shortlist() {
       toast.success(`Successfully hired ${applicant.name}`);
       // Redirect to ProjectTracker Active tab
       setTimeout(() => {
-        navigate("/client-dashboard?tab=active");
+        navigate("/client/dashboard?tab=active");
       }, 2000);
     } catch (error) {
       logError(`Hire applicant ${applicant.id}`, error);
@@ -156,13 +157,21 @@ export default function Shortlist() {
   // Navigate to freelancer profile
   const handleViewProfile = (applicant) => {
     console.log(`[Shortlist] Navigating to profile for freelancer ${applicant.freelancerId}`);
-    navigate(`/freelancerProfile/${applicant.freelancerId}`);
+    navigate(`/freelancers/${applicant.freelancerId}`);
   };
 
-  // Navigate to chat
+  // Open the floating chat widget for the selected job/applicant.
   const handleChat = (applicant) => {
-    console.log(`[Shortlist] Starting chat with freelancer ${applicant.freelancerId}`);
-    navigate(`/messages?freelancerId=${applicant.freelancerId}`);
+    if (!selectedJob?.id) {
+      toast.info("Select a job first to chat about it.");
+      return;
+    }
+    openChatWidget(selectedJob.id, {
+      id: applicant.freelancerId,
+      firstname: applicant.name?.split(" ")[0],
+      lastname: applicant.name?.split(" ").slice(1).join(" "),
+      avatar: applicant.avatar || applicant.profilePicture,
+    });
   };
 
   return (
@@ -189,7 +198,7 @@ export default function Shortlist() {
                     <div
                       key={job.id}
                       className="p-6 hover:bg-gray-50/50 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/client-dashboard/job-applicants/${job.id}`)}
+                      onClick={() => navigate(`/client/jobs/${job.id}/applicants`)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">

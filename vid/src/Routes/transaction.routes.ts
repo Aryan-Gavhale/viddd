@@ -37,12 +37,24 @@ const auth = [authenticateToken];
 
 export default async function routes(fastify: FastifyInstance, _opts: FastifyPluginOptions): Promise<void> {
   // Static routes first
-  fastify.post("/", { preHandler: [...auth, validateBody(createTransactionSchema)], handler: wrapHandler(createTransaction) });
+  fastify.post("/", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    preHandler: [...auth, validateBody(createTransactionSchema)],
+    handler: wrapHandler(createTransaction),
+  });
   fastify.get("/", { preHandler: [...auth, validateQuery(getTransactionsSchema)], handler: wrapHandler(getUserTransactions) });
   fastify.get("/earnings", { preHandler: [...auth, validateQuery(getEarningsSchema)], handler: wrapHandler(getEarnings) });
 
   // Dynamic routes last
-  fastify.post("/:transactionId/process", { preHandler: auth, handler: wrapHandler(processPayment) });
-  fastify.post("/:transactionId/refund", { preHandler: [...auth, validateBody(refundTransactionSchema)], handler: wrapHandler(refundTransaction) });
+  fastify.post("/:transactionId/process", {
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    preHandler: auth,
+    handler: wrapHandler(processPayment),
+  });
+  fastify.post("/:transactionId/refund", {
+    config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
+    preHandler: [...auth, validateBody(refundTransactionSchema)],
+    handler: wrapHandler(refundTransaction),
+  });
   fastify.get("/:transactionId", { preHandler: auth, handler: wrapHandler(getTransaction) });
 }

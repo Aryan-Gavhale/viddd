@@ -84,7 +84,7 @@ export default function ToolsEquipmentCertifications({ onNext, onPrev, data }) {
         equipmentLenses: formData.equipment.lenses.join(", "),
         equipmentLighting: formData.equipment.lighting.join(", "),
         equipmentOther: formData.equipment.other.join(", "),
-        certifications: formData.certifications.join(", "),
+        certifications: formData.certifications,
       })
     }
   }

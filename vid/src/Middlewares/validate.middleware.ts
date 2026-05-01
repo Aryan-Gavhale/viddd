@@ -50,7 +50,9 @@ export function validateBody(schema: ObjectSchema) {
         field: d.path.join("."),
         message: d.message,
       }));
-      throw new ApiError(400, "Validation failed", errorDetails);
+      const err = new ApiError(400, "Validation failed", errorDetails);
+      console.error("[validateBody] Validation errors:", JSON.stringify(errorDetails));
+      throw err;
     }
 
     request.body = value;

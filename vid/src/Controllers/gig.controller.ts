@@ -611,8 +611,10 @@ const getGig = async (req, res, next) => {
 
     return res.status(200).json(new ApiResponse(200, { ...gig, averageRating }, "Gig retrieved successfully"));
   } catch (error) {
-    logger.error("Error retrieving gig: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve gig"));
+    if (error instanceof ApiError) return next(error);
+    const e = error as Error;
+    logger.error(`Error retrieving gig: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve gig: ${e.message}`));
   }
 };
 

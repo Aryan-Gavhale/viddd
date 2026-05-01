@@ -299,21 +299,12 @@ export const submitContact = async (req: ExpressRequest, res: ExpressResponse, n
     if (!firstName || !lastName || !email || !subject || !message) return next(new ApiError(400, "Missing required fields"));
 
     const contact = (await sqlOne(
-      `INSERT INTO "Contact" ("firstName", "lastName", "email", "phone", "category", "subject", "message", "priority", "contactMethod", "createdAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *`,
+      `INSERT INTO "Contact" ("firstName", "lastName", "email", "phone", "category", "subject", "message", "priority", "contactMethod", "status", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5::"ContactCategory", $6, $7, $8::"ContactPriority", $9::"ContactMethod", 'PENDING'::"ContactStatus", NOW(), NOW()) RETURNING *`,
       [firstName, lastName, email, phone, category || "OTHER", subject, message, priority || "MEDIUM", contactMethod || "EMAIL"]
     )) as DbRow | null;
     if (!contact || contact.id == null) {
       return next(new ApiError(500, "Failed to create contact"));
-    }
-
-    // FIX M7: files are now uploaded to S3 via shared middleware — use S3 URLs
-    const files = (req as ExpressRequest & { files?: Array<{ originalname: string; location?: string; mimetype: string; size: number }> }).files ?? [];
-    for (const file of files) {
-      await sql(
-        `INSERT INTO "ContactFile" ("contactId", "fileName", "filePath", "fileType", "fileSize") VALUES ($1, $2, $3, $4, $5)`,
-        [contact.id, file.originalname, file.location || "", file.mimetype, file.size]
-      );
     }
 
     return res.status(201).json(new ApiResponse(201, contact, "Contact form submitted successfully"));

@@ -83,24 +83,18 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.put("/:jobId", { preHandler: [...auth, uploadSingle("videoFile"), validateBody(updateJobSchema)], handler: wrapHandler(updateJob) });
   fastify.delete("/:jobId", { preHandler: auth, handler: wrapHandler(deleteJob) });
   fastify.get("/", { preHandler: [...auth, validateQuery(getJobsSchema)], handler: wrapHandler(getClientJobs) });
-  fastify.post("/apply/:jobId", { preHandler: [...auth, validateBody(applyBodySchema)], handler: wrapHandler(applyJob) });
+  fastify.post("/apply/:jobId", { preHandler: [...auth, restrictTo(["FREELANCER"]), validateBody(applyBodySchema)], handler: wrapHandler(applyJob) });
 
   // Client-specific routes
   fastify.get("/:jobId/applications", { preHandler: [...auth, restrictTo(["CLIENT"])], handler: wrapHandler(getJobApplications) });
-  fastify.post("/:jobId/apply/accept", {
-    preHandler: [...auth, validateBody(applicationActionSchema), restrictTo("CLIENT")],
+  fastify.post("/:jobId/accept", {
+    preHandler: [...auth, validateBody(applicationActionSchema), restrictTo(["CLIENT"])],
     handler: wrapHandler(acceptApplication),
   });
-  fastify.post("/:jobId/apply/reject", {
-    preHandler: [...auth, validateBody(applicationActionSchema), restrictTo("CLIENT")],
+  fastify.post("/:jobId/reject", {
+    preHandler: [...auth, validateBody(applicationActionSchema), restrictTo(["CLIENT"])],
     handler: wrapHandler(rejectApplication),
   });
-
-  // Application routes
-  fastify.post("/:jobId/apply", { preHandler: [...auth, restrictTo("FREELANCER")], handler: wrapHandler(applyJob) });
-  fastify.get("/:jobId/apply/status", { preHandler: auth, handler: wrapHandler(checkApplicationStatus) });
-  fastify.post("/:jobId/accept", { preHandler: [...auth, restrictTo("CLIENT")], handler: wrapHandler(acceptApplication) });
-  fastify.post("/:jobId/reject", { preHandler: [...auth, restrictTo("CLIENT")], handler: wrapHandler(rejectApplication) });
 
   // Admin routes (use("/admin", restrictTo(["ADMIN", "SUPERADMIN"])) + per-route)
   const admin = [authenticateToken, restrictTo(["ADMIN", "SUPERADMIN"])];

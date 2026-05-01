@@ -17,15 +17,23 @@ import { emailQueue, notificationQueue, paymentQueue, fileCleanupQueue } from ".
 const startServer = async (): Promise<void> => {
   try {
     await connectDB();
-    logger.info("Connected to PostgreSQL via pg Pool.");
 
     const app = await buildApp();
     const PORT = parseInt(process.env.PORT || "3000", 10);
 
     await app.listen({ port: PORT, host: "0.0.0.0" });
 
-    const io = await initializeSocket(app.server);
-    startProcessors();
+    let io: Awaited<ReturnType<typeof initializeSocket>> | null = null;
+    try {
+      io = await initializeSocket(app.server);
+    } catch (e) {
+      logger.warn("Socket.IO init failed (non-fatal): %s", (e as Error).message);
+    }
+    try {
+      startProcessors();
+    } catch (e) {
+      logger.warn("Bull processors init failed (non-fatal): %s", (e as Error).message);
+    }
 
     logger.info(`Fastify server running on port ${PORT} [${process.env.NODE_ENV || "development"}]`);
 
@@ -63,7 +71,8 @@ const startServer = async (): Promise<void> => {
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
   } catch (error) {
-    logger.error("Startup failed: %s", (error as Error).message);
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error(`Startup failed: ${err.message}\n${err.stack}`);
     await disconnectDB();
     process.exit(1);
   }

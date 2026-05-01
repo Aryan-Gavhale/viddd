@@ -20,6 +20,10 @@ export const EVENTS = {
   // Messaging
   SEND_MESSAGE: "message:send",
   NEW_MESSAGE: "message:new",
+  /** Server → sender ack with the persisted server message + the client temp id. */
+  MESSAGE_SENT: "message:sent",
+  /** Server → sender error for a specific outgoing message (with clientId). */
+  MESSAGE_FAILED: "message:failed",
   DELETE_MESSAGE: "message:delete",
   MESSAGE_DELETED: "message:deleted",
   EDIT_MESSAGE: "message:edit",
@@ -46,6 +50,21 @@ export const EVENTS = {
 
   // Order updates (for future real-time order tracking)
   ORDER_STATUS_CHANGED: "order:status:changed",
+
+  // Video review (timecoded comments + drawings)
+  REVIEW_COMMENT_ADDED: "review:comment:added",
+  REVIEW_COMMENT_UPDATED: "review:comment:updated",
+  REVIEW_COMMENT_DELETED: "review:comment:deleted",
+  REVIEW_FILE_STATUS_CHANGED: "review:file:status",
+
+  // Co-watch (synchronized playback for the same file)
+  COWATCH_JOIN: "cowatch:join",
+  COWATCH_LEAVE: "cowatch:leave",
+  COWATCH_STATE: "cowatch:state",
+  COWATCH_SEEK: "cowatch:seek",
+  COWATCH_PLAY: "cowatch:play",
+  COWATCH_PAUSE: "cowatch:pause",
+  COWATCH_PARTICIPANTS: "cowatch:participants",
 };
 
 export const ROOMS = {

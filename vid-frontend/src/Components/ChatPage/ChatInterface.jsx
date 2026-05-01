@@ -1,49 +1,74 @@
-import React, { useState } from 'react';
-import ChatList from "./Chatlist";
-import ChatWindow from './ChatWindow';
+import { useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { selectUser } from "../../redux/userSlice";
+import chatStore from "../../state/chatStore.js";
+import axiosInstance from "../../utils/axios.js";
 
-const ChatInterface = () => {
-  const [selectedChat, setSelectedChat] = useState(null);
+/**
+ * Legacy `/messages` entry point.
+ *
+ * The product no longer ships a standalone "messages inbox". Conversations
+ * are scoped to the project (job) they belong to, and are rendered in two
+ * places that share the same store:
+ *
+ *   1. The workspace project chat panel (`/client/workspace`, `/editor/workspace`)
+ *   2. The floating bottom-right widget (opened from anywhere via
+ *      `chatStore.openWidget(jobId, peer)`)
+ *
+ * If this page is hit with `?freelancerId=X` (legacy) or `?jobId=X`, we try
+ * to open the widget for that conversation and forward the user to their
+ * workspace (which already shows the same thread). If we can't resolve a
+ * jobId, we just send them to the workspace.
+ */
+export default function ChatInterface() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const user = useSelector(selectUser);
 
-  const [chats, setChats] = useState([
-    { id: '1', name: 'John Doe', lastMessage: "Hey, how's the edit coming along?", unreadCount: 2, status: 'online' },
-    { id: '2', name: 'Jane Smith', lastMessage: "I've uploaded the new footage.", unreadCount: 0, status: 'offline' },
-    { id: '3', name: 'Mike Johnson', lastMessage: 'Can we schedule a call?', unreadCount: 1, status: 'online' },
-  ]);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const jobIdParam = params.get("jobId");
+    const freelancerIdParam = params.get("freelancerId");
+    const target = user?.role === "FREELANCER" ? "/editor/workspace" : "/client/workspace";
 
-  const [messages, setMessages] = useState([
-    { id: '1', senderId: '1', text: "Hey, how's the edit coming along?", timestamp: new Date().toISOString(), status: 'read' },
-    { id: '2', senderId: 'me', text: "It's going well! I'm about 70% done.", timestamp: new Date().toISOString(), status: 'delivered' },
-    { id: '3', senderId: '1', text: "Great! Can't wait to see it.", timestamp: new Date().toISOString(), status: 'sent' },
-  ]);
+    const open = async () => {
+      if (jobIdParam) {
+        chatStore.openWidget(Number(jobIdParam), null);
+        navigate(target, { replace: true });
+        return;
+      }
 
-  const handleSendMessage = (text) => {
-    const newMessage = {
-      id: (messages.length + 1).toString(),
-      senderId: 'me',
-      text,
-      timestamp: new Date().toISOString(),
-      status: 'sent',
+      if (freelancerIdParam && user?.role === "CLIENT") {
+        try {
+          const res = await axiosInstance.get("/jobs", {
+            params: { page: 1, limit: 50 },
+          });
+          const jobs = res.data?.data?.jobs || [];
+          const match = jobs.find(
+            (j) => Number(j.freelancer_id || j.freelancerId) === Number(freelancerIdParam)
+          );
+          if (match) {
+            chatStore.openWidget(match.id, {
+              id: Number(freelancerIdParam),
+              firstname: match.freelancer?.firstname,
+              lastname: match.freelancer?.lastname,
+              avatar: match.freelancer?.profilePicture,
+            });
+          }
+        } catch {
+          /* fall through to navigation */
+        }
+      }
+      navigate(target, { replace: true });
     };
-    setMessages([...messages, newMessage]);
-  };
+
+    open();
+  }, [location.search, navigate, user]);
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <div className="w-1/3 border-r border-gray-200 bg-white">
-        <ChatList chats={chats} selectedChat={selectedChat} onSelectChat={setSelectedChat} />
-      </div>
-      <div className="w-2/3">
-        {selectedChat ? (
-          <ChatWindow chat={selectedChat} messages={messages} onSendMessage={handleSendMessage} />
-        ) : (
-          <div className="flex items-center justify-center h-full bg-gray-50">
-            <p className="text-xl text-gray-500">Select a chat to start messaging</p>
-          </div>
-        )}
-      </div>
+    <div className="min-h-[60vh] flex items-center justify-center text-gray-500">
+      Opening conversation…
     </div>
   );
-};
-
-export default ChatInterface;
+}

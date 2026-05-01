@@ -1,6 +1,9 @@
 /**
  * Raw PostgreSQL connection pool and query helpers.
  * Replaces Prisma ORM throughout the application.
+ *
+ * Pool creation is deferred to connectDB() so that dotenv has loaded
+ * process.env.DATABASE_URL before the Pool constructor reads it.
  */
 import pg from "pg";
 import logger from "./Utils/logger.js";
@@ -15,45 +18,49 @@ types.setTypeParser(1700, (val: string) => {
   return n;
 });
 
-/**
- * FIX M4: increase max connections; behind PgBouncer (recommended for prod),
- *         set DB_POOL_MAX low (e.g. 10) since PgBouncer fans out the work.
- * FIX M6: enforce statement_timeout + idle_in_transaction_session_timeout per
- *         connection so a single runaway query cannot lock up the pool.
- */
-const POOL_MAX = parseInt(process.env.DB_POOL_MAX || "20", 10);
-const POOL_MIN = parseInt(process.env.DB_POOL_MIN || "2", 10);
-const STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "30000", 10);
-const IDLE_TX_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TX_TIMEOUT_MS || "60000", 10);
+let pool: InstanceType<typeof Pool>;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: POOL_MAX,
-  min: POOL_MIN,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  application_name: "vidlancing-api",
-});
+function getPool(): InstanceType<typeof Pool> {
+  if (!pool) {
+    const POOL_MAX = parseInt(process.env.DB_POOL_MAX || "20", 10);
+    const POOL_MIN = parseInt(process.env.DB_POOL_MIN || "2", 10);
+    const STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "30000", 10);
+    const IDLE_TX_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TX_TIMEOUT_MS || "60000", 10);
 
-pool.on("error", (err) => {
-  logger.error("Unexpected pg pool error: %s", err.message);
-});
+    const dbUrl = process.env.DATABASE_URL || "";
+    const needsSsl = /sslmode=require/.test(dbUrl) || dbUrl.includes(".neon.tech");
 
-pool.on("connect", (client) => {
-  // Apply per-connection timeouts so any long query is killed instead of pinning the pool.
-  client
-    .query(
-      `SET statement_timeout = ${STATEMENT_TIMEOUT_MS};
-       SET idle_in_transaction_session_timeout = ${IDLE_TX_TIMEOUT_MS};
-       SET lock_timeout = 5000;`
-    )
-    .catch((e) => logger.warn("Failed to set per-connection timeouts: %s", (e as Error).message));
-});
+    pool = new Pool({
+      connectionString: dbUrl,
+      max: POOL_MAX,
+      min: POOL_MIN,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      application_name: "vidlancing-api",
+      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
+
+    pool.on("error", (err) => {
+      logger.error("Unexpected pg pool error: %s", err.message);
+    });
+
+    pool.on("connect", (client) => {
+      client
+        .query(
+          `SET statement_timeout = ${STATEMENT_TIMEOUT_MS};
+           SET idle_in_transaction_session_timeout = ${IDLE_TX_TIMEOUT_MS};
+           SET lock_timeout = 5000;`
+        )
+        .catch((e) => logger.warn("Failed to set per-connection timeouts: %s", (e as Error).message));
+    });
+  }
+  return pool;
+}
 
 // ─── Core query helpers ───
 
 export async function sql(text: string, params: unknown[] = []): Promise<DbRow[]> {
-  const { rows } = await pool.query(text, params);
+  const { rows } = await getPool().query(text, params);
   return rows;
 }
 
@@ -70,7 +77,7 @@ export async function sqlCount(text: string, params: unknown[] = []): Promise<nu
 // ─── Transaction helper ───
 
 export async function withTransaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     const result = await callback(client);
@@ -104,15 +111,18 @@ export const SOFT_DELETE_MODELS = new Set(["Gig", "Job", "Order", "Review", "Mes
 // ─── Lifecycle ───
 
 export async function connectDB(): Promise<void> {
-  const client = await pool.connect();
+  const p = getPool();
+  const client = await p.connect();
   client.release();
   logger.info("Connected to PostgreSQL via pg Pool.");
 }
 
 export async function disconnectDB(): Promise<void> {
-  await pool.end();
-  logger.info("PostgreSQL pool closed.");
+  if (pool) {
+    await pool.end();
+    logger.info("PostgreSQL pool closed.");
+  }
 }
 
 export { pool };
-export default { sql, sqlOne, sqlCount, withTransaction, txSql, txOne, pool, connectDB, disconnectDB };
+export default { sql, sqlOne, sqlCount, withTransaction, txSql, txOne, get pool() { return getPool(); }, connectDB, disconnectDB };

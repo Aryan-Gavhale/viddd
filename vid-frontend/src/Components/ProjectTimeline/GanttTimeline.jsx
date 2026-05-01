@@ -65,7 +65,7 @@ export default function GanttTimeline() {
 
   const fetchItems = useCallback(async () => {
     try {
-      const res = await axiosInstance.get(`/timeline/projects/${jobId}`);
+      const res = await axiosInstance.get(`/timelines/projects/${jobId}`);
       const data = res.data?.data || res.data || [];
       setItems(Array.isArray(data) ? data : []);
     } catch {
@@ -159,10 +159,10 @@ export default function GanttTimeline() {
     }
     try {
       if (editingItem) {
-        await axiosInstance.put(`/timeline/${editingItem.id}`, form);
+        await axiosInstance.put(`/timelines/${editingItem.id}`, form);
         toast.success("Task updated");
       } else {
-        await axiosInstance.post(`/timeline/projects/${jobId}`, form);
+        await axiosInstance.post(`/timelines/projects/${jobId}`, form);
         toast.success("Task added");
       }
       resetForm();
@@ -175,7 +175,7 @@ export default function GanttTimeline() {
   const handleDelete = async (id) => {
     if (!confirm("Delete this task?")) return;
     try {
-      await axiosInstance.delete(`/timeline/${id}`);
+      await axiosInstance.delete(`/timelines/${id}`);
       toast.success("Task deleted");
       await fetchItems();
     } catch {
@@ -188,7 +188,7 @@ export default function GanttTimeline() {
       : item.status === "IN_PROGRESS" ? "COMPLETED" : "IN_PROGRESS";
     const nextProgress = nextStatus === "COMPLETED" ? 100 : nextStatus === "IN_PROGRESS" ? 50 : 0;
     try {
-      await axiosInstance.put(`/timeline/${item.id}`, {
+      await axiosInstance.put(`/timelines/${item.id}`, {
         status: nextStatus,
         progress: nextProgress,
       });
@@ -201,7 +201,7 @@ export default function GanttTimeline() {
   const handleProgressChange = async (item, progress) => {
     try {
       const status = progress === 100 ? "COMPLETED" : progress > 0 ? "IN_PROGRESS" : "PENDING";
-      await axiosInstance.put(`/timeline/${item.id}`, { progress, status });
+      await axiosInstance.put(`/timelines/${item.id}`, { progress, status });
       await fetchItems();
     } catch {
       toast.error("Failed to update progress");

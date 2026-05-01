@@ -61,7 +61,10 @@ const applyJob = async (req, res, next) => {
       [freelancerId]
     );
     if (!freelancer || !freelancer.freelancerProfile) {
-      return next(new ApiError(404, "Freelancer profile not found"));
+      return next(new ApiError(404, "Freelancer profile not found. Please complete your profile before applying."));
+    }
+    if (!freelancer.isProfileComplete) {
+      return next(new ApiError(403, "Please complete your profile before applying to jobs."));
     }
 
     const existingApplication = await sqlOne(
@@ -73,8 +76,8 @@ const applyJob = async (req, res, next) => {
     }
 
     const [appliedRow] = await sql(
-      `INSERT INTO "Application" ("aboutFreelancer", "jobId", "freelancerId")
-       VALUES ($1, $2, $3)
+      `INSERT INTO "Application" ("aboutFreelancer", "jobId", "freelancerId", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, NOW(), NOW())
        RETURNING *`,
       [aboutFreelancer, jobId, freelancerId]
     );
@@ -89,8 +92,9 @@ const applyJob = async (req, res, next) => {
       new ApiResponse(200, { appliedJob }, "Applied to job successfully")
     );
   } catch (error) {
-    logger.error("Error applying for job: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to apply for job"));
+    const err = error as Error;
+    logger.error(`Error applying for job: ${err.message}\n${err.stack}`);
+    return next(new ApiError(500, `Failed to apply for job: ${err.message}`));
   }
 };
 
@@ -504,6 +508,7 @@ const getClientJobs = async (req, res, next) => {
       const { pb_fn, pb_ln, fu_fn, fu_ln, fu_pp, fu_rt, fp_jt, fp_sk, fp_ov, ...jr } = row;
       const fr = fu_fn
         ? {
+            id: jr.freelancer_id,
             firstname: fu_fn,
             lastname: fu_ln,
             profilePicture: fu_pp,
@@ -511,7 +516,7 @@ const getClientJobs = async (req, res, next) => {
             freelancerProfile: { jobTitle: fp_jt, skills: fp_sk, overview: fp_ov },
           }
         : null;
-      return { ...jobRowToClientShape(jr as DbRow), postedBy: { firstname: pb_fn, lastname: pb_ln }, freelancer: fr };
+      return { ...jobRowToClientShape(jr as DbRow), postedBy: { id: jr.posted_by_id, firstname: pb_fn, lastname: pb_ln }, freelancer: fr };
     });
 
     return res.status(200).json(
@@ -528,8 +533,10 @@ const getClientJobs = async (req, res, next) => {
       )
     );
   } catch (error) {
-    logger.error("Error retrieving client jobs: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve client jobs"));
+    if (error instanceof ApiError) return next(error);
+    const e = error as Error;
+    logger.error(`Error retrieving client jobs: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve client jobs: ${e.message}`));
   }
 };
 
@@ -970,8 +977,8 @@ const acceptApplication = async (req, res, next) => {
       await q(
         `WITH rejected AS (
            UPDATE "Application"
-           SET "status" = 'REJECTED'::"ApplicationStatus", "updatedAt" = NOW()
-           WHERE "jobId" = $1 AND "id" != $2 AND "status" = 'PENDING'::"ApplicationStatus"
+           SET "status" = 'REJECTED', "updatedAt" = NOW()
+           WHERE "jobId" = $1 AND "id" != $2 AND "status" = 'PENDING'
            RETURNING "freelancerId", "id"
          )
          INSERT INTO "Notification" ("user_id", "type", "content", "entityType", "entityId", "priority", "metadata")

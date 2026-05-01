@@ -102,7 +102,7 @@ export const JobList = memo(function JobList({ jobs, activeTab, searchQuery, sav
           <div
             key={job.id}
             className="group relative overflow-hidden rounded-xl border border-gray-100 bg-white transition-all duration-200 hover:border-indigo-100 hover:shadow-sm cursor-pointer"
-            onClick={() => navigate(`/job/${job.id}`)} // Navigate to job description
+            onClick={() => navigate(`/jobs/${job.id}`)} // Navigate to job description
           >
             <div className="relative p-6">
               {/* Header */}

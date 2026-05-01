@@ -17,7 +17,7 @@ export default function VideoPlayerModal({ open, onClose, videoId }) {
     if (videoId == null) return
     setLoading(true)
     try {
-      const { data: body } = await axiosInstance.get(`/portfolio/video/${videoId}`)
+      const { data: body } = await axiosInstance.get(`/portfolios/video/${videoId}`)
       setData(body.data)
     } catch (err) {
       console.error(err)

@@ -139,7 +139,7 @@ export default function TrendingGigs() {
             >
               <div className="relative bg-white rounded-lg overflow-hidden border border-gray-300 flex flex-col h-full">
                 {/* Thumbnail */}
-                <Link href={`/gig/${gig.id}`} className="block relative aspect-[16/9] overflow-hidden">
+                <Link href={`/gigs/${gig.id}`} className="block relative aspect-[16/9] overflow-hidden">
                   <img
                     src={gig.thumbnail || "/placeholder.svg"}
                     alt={gig.title}
@@ -188,7 +188,7 @@ export default function TrendingGigs() {
                   </div>
 
                   {/* Title */}
-                  <Link href={`/gig/${gig.id}`} className="block group/title mb-2">
+                  <Link href={`/gigs/${gig.id}`} className="block group/title mb-2">
                     <h3 className="text-base text-gray-900 font-medium line-clamp-2 h-12 overflow-hidden leading-snug group-hover/title:text-gray-600 transition-colors">
                       {gig.title}
                     </h3>

@@ -45,7 +45,7 @@ export default function FreelancerPortfolio({ freelancerId }) {
       if (append) setLoadingMore(true)
       else setLoading(true)
       try {
-        const { data: body } = await axiosInstance.get(`/portfolio/${freelancerId}`, {
+        const { data: body } = await axiosInstance.get(`/portfolios/${freelancerId}`, {
           params: { page: p, limit },
         })
         const payload = body?.data

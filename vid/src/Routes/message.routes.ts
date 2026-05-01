@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import {
   sendMessage,
+  sendJobMessage,
   getMessages,
   getMessagesByJobId,
   markMessageAsRead,
@@ -38,10 +39,18 @@ const getMessagesSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const sendJobMessageSchema = Joi.object({
+  content: Joi.string().allow("").max(5000).optional(),
+  attachments: Joi.array().items(Joi.object().unknown(true)).max(20).optional(),
+  replyToId: Joi.string().max(120).optional().allow(null),
+  clientId: Joi.string().max(120).optional().allow(null),
+}).or("content", "attachments");
+
 const auth = [authenticateToken];
 
 export default async function routes(fastify: FastifyInstance, _opts: FastifyPluginOptions): Promise<void> {
   fastify.post("/", { preHandler: [...auth, uploadMultiple("attachments", 5), validateBody(sendMessageSchema)], handler: wrapHandler(sendMessage) });
+  fastify.post("/job/:jobId", { preHandler: [...auth, validateBody(sendJobMessageSchema)], handler: wrapHandler(sendJobMessage) });
   fastify.get("/", { preHandler: [...auth, validateQuery(getMessagesSchema)], handler: wrapHandler(getMessages) });
   fastify.get("/job/:jobId", { preHandler: auth, handler: wrapHandler(getMessagesByJobId) });
   fastify.put("/:messageId/read", { preHandler: auth, handler: wrapHandler(markMessageAsRead) });

@@ -112,7 +112,7 @@ export default function Portfolio() {
     const run = async () => {
       setLoading(true)
       try {
-        const { data: body } = await axiosInstance.get("/portfolio/featured")
+        const { data: body } = await axiosInstance.get("/portfolios/featured")
         const vids = body?.data?.videos ?? body?.data ?? []
         if (!cancelled) setRawVideos(Array.isArray(vids) ? vids : [])
       } catch (e) {

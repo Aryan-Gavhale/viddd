@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import { wrapHandler } from "../Utils/wrapHandler.js";
-import { searchGigs, searchFreelancers } from "../Controllers/search.controller.js";
+import { searchGigs, searchFreelancers, searchSuggestions } from "../Controllers/search.controller.js";
 import { validateQuery } from "../Middlewares/validate.middleware.js";
 import Joi from "joi";
 
@@ -31,6 +31,11 @@ const searchFreelancersSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const suggestionsSchema = Joi.object({
+  q: Joi.string().allow("").max(120).optional(),
+  limit: Joi.number().integer().min(1).max(8).default(5),
+});
+
 export default async function routes(fastify: FastifyInstance, _opts: FastifyPluginOptions): Promise<void> {
   fastify.get("/gigs", {
     preHandler: [validateQuery(searchGigsSchema)],
@@ -39,5 +44,9 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.get("/freelancers", {
     preHandler: [validateQuery(searchFreelancersSchema)],
     handler: wrapHandler(searchFreelancers),
+  });
+  fastify.get("/suggestions", {
+    preHandler: [validateQuery(suggestionsSchema)],
+    handler: wrapHandler(searchSuggestions),
   });
 }

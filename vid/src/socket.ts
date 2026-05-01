@@ -2,6 +2,7 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { Redis } from "ioredis";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 import { sqlOne, sql } from "./db.js";
 import logger from "./Utils/logger.js";
 import { EVENTS, ROOMS } from "../../shared/socketEvents.js";
@@ -61,16 +62,16 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     const redisOpts: Record<string, unknown> = {
       password: redisPassword,
       maxRetriesPerRequest: 3,
-      retryStrategy: (times: number) => Math.min(times * 200, 5000),
+      lazyConnect: true,
+      retryStrategy: (times: number) => {
+        if (process.env.NODE_ENV !== "production" && times > 3) return null as unknown as number;
+        return Math.min(times * 200, 5000);
+      },
       ...(usesTls ? { tls: { rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false" } } : {}),
     };
 
     const pubClient = new Redis(redisUrl, redisOpts);
     const subClient = pubClient.duplicate();
-
-    io.adapter(createAdapter(pubClient, subClient));
-    socketIoRedisAdapterOk = true;
-    logger.info("Socket.IO Redis adapter connected (ioredis)");
 
     pubClient.on("error", (err) => {
       logger.error("Socket.IO Redis pub error: %s", err.message);
@@ -82,8 +83,14 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     });
     pubClient.on("ready", () => { socketIoRedisAdapterOk = true; });
     subClient.on("ready", () => { socketIoRedisAdapterOk = true; });
+
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+
+    io.adapter(createAdapter(pubClient, subClient));
+    socketIoRedisAdapterOk = true;
+    logger.info("Socket.IO Redis adapter connected (ioredis)");
   } catch (err) {
-    logger.error("Socket.IO Redis adapter failed: %s", (err as Error).message);
+    logger.warn("Socket.IO Redis adapter unavailable — using in-memory adapter: %s", (err as Error).message);
     socketIoRedisAdapterOk = false;
   }
 
@@ -162,14 +169,15 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
       logger.info("Left job room", { userId: socket.user.id, jobId });
     });
 
-    socket.on(EVENTS.SEND_MESSAGE, async ({ jobId, content, attachments = [], replyToId }: {
+    socket.on(EVENTS.SEND_MESSAGE, async ({ jobId, content, attachments = [], replyToId, clientId }: {
       jobId: string | number;
       content: string;
       attachments?: unknown[];
       replyToId?: string;
+      clientId?: string;
     }) => {
       if (!checkSocketRate(socket.user.id)) {
-        socket.emit(EVENTS.ERROR, { message: "Rate limit exceeded" });
+        socket.emit(EVENTS.MESSAGE_FAILED, { clientId, message: "Rate limit exceeded" });
         return;
       }
       try {
@@ -196,11 +204,36 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
           replyTo = replyToId;
         }
 
+        // Resolve the implicit receiver (the other party in the job) for legacy
+        // schemas that still keep receiverId. Falls back to self when only one
+        // side is set (e.g. before a freelancer is hired).
+        const receiverId =
+          socket.user.id === job.postedById ? job.freelancerId : job.postedById;
+
+        const messageId = randomUUID();
+        const safeAttachments = Array.isArray(attachments) ? attachments : [];
         const message = await sqlOne(
-          `INSERT INTO "Message" ("jobId", "senderId", "content", "attachments", "replyTo", "timestamp", "reactions")
-           VALUES ($1, $2, $3, $4::jsonb, $5, NOW(), '[]'::jsonb)
+          `INSERT INTO "Message"
+             ("id", "jobId", "senderId", "receiverId", "content",
+              "attachments", "replyTo", "timestamp", "reactions")
+           VALUES (
+             $1, $2, $3, $4, $5,
+             COALESCE(
+               (SELECT array_agg(value) FROM jsonb_array_elements($6::jsonb)),
+               ARRAY[]::jsonb[]
+             ),
+             $7, NOW(), '[]'::jsonb
+           )
            RETURNING *`,
-          [parseInt(String(jobId)), socket.user.id, content || "", JSON.stringify(attachments), replyTo]
+          [
+            messageId,
+            parseInt(String(jobId)),
+            socket.user.id,
+            receiverId ?? socket.user.id,
+            content || "",
+            JSON.stringify(safeAttachments),
+            replyTo,
+          ]
         );
 
         if (!message) throw new Error("Failed to create message");
@@ -208,22 +241,33 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
         const formattedMessage = {
           id: message.id,
           jobId: message.jobId,
+          senderId: socket.user.id,
           sender: {
             id: socket.user.id,
+            firstname: socket.user.firstname,
+            lastname: socket.user.lastname,
             name: `${socket.user.firstname} ${socket.user.lastname}`,
             avatar: socket.user.profilePicture || null,
+            profilePicture: socket.user.profilePicture || null,
           },
           content: message.content,
-          attachments: message.attachments,
+          attachments: Array.isArray(message.attachments) ? message.attachments : [],
           replyTo: message.replyTo,
           timestamp: (message.timestamp as Date).toISOString(),
+          reactions: [],
         };
 
-        io.to(ROOMS.job(jobId)).emit(EVENTS.NEW_MESSAGE, formattedMessage);
+        // 1. Broadcast to everyone else in the room (skips this socket).
+        socket.to(ROOMS.job(jobId)).emit(EVENTS.NEW_MESSAGE, formattedMessage);
+        // 2. Direct ack to the sender that includes the clientId so the
+        //    optimistic placeholder can be reconciled, even if the sender
+        //    happens to not be in the room yet.
+        socket.emit(EVENTS.MESSAGE_SENT, { clientId, message: formattedMessage });
         logger.info("Message sent", { userId: socket.user.id, jobId, messageId: message.id });
       } catch (error) {
-        logger.error("Send message error", { userId: socket.user.id, error: (error as Error).message });
-        socket.emit(EVENTS.ERROR, { message: (error as Error).message });
+        const msg = (error as Error).message;
+        logger.error("Send message error", { userId: socket.user.id, error: msg });
+        socket.emit(EVENTS.MESSAGE_FAILED, { clientId, message: msg });
       }
     });
 
@@ -454,6 +498,115 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
         });
       }
     }
+
+    /* ───────────────────── Co-watch (synchronized playback) ─────────────────
+     * In-memory rooms scoped per (jobId, fileId). Each socket reports its
+     * intent (play/pause/seek) and the server fans the event out to everyone
+     * else in the room and caches the last known state so a late-joiner can
+     * jump in mid-stream.
+     */
+    const cowatchRoom = (jobId: number, fileId: number) => `cowatch:${jobId}:${fileId}`;
+
+    const sendParticipants = async (jobId: number, fileId: number) => {
+      const sockets = await io.in(cowatchRoom(jobId, fileId)).fetchSockets();
+      const seen = new Map<number, { id: number; name: string; profilePicture?: string | null }>();
+      for (const s of sockets) {
+        const u = (s as unknown as AuthenticatedSocket).user;
+        if (u) {
+          seen.set(u.id, {
+            id: u.id,
+            name: `${u.firstname} ${u.lastname}`.trim(),
+            profilePicture: u.profilePicture || null,
+          });
+        }
+      }
+      io.to(cowatchRoom(jobId, fileId)).emit(EVENTS.COWATCH_PARTICIPANTS, {
+        jobId, fileId, participants: [...seen.values()],
+      });
+    };
+
+    socket.on(EVENTS.COWATCH_JOIN, async ({ jobId, fileId }: { jobId: number; fileId: number }) => {
+      try {
+        const job = await sqlOne(
+          `SELECT posted_by_id AS "postedById", freelancer_id AS "freelancerId"
+             FROM "Job" WHERE id = $1 AND "deletedAt" IS NULL`,
+          [Number(jobId)]
+        );
+        if (!job) throw new Error("Job not found");
+        if (socket.user.id !== Number(job.postedById) && socket.user.id !== Number(job.freelancerId)) {
+          throw new Error("Unauthorized to co-watch this file");
+        }
+        socket.join(cowatchRoom(Number(jobId), Number(fileId)));
+        const session = await sqlOne(
+          `SELECT * FROM "CoWatchSession"
+            WHERE "fileId" = $1 AND "endedAt" IS NULL
+            ORDER BY "createdAt" DESC LIMIT 1`,
+          [Number(fileId)]
+        );
+        socket.emit(EVENTS.COWATCH_STATE, {
+          jobId, fileId,
+          currentTimeSec: session ? Number(session.currentTimeSec) : 0,
+          isPlaying: session ? Boolean(session.isPlaying) : false,
+          hostId: session ? Number(session.hostId) : socket.user.id,
+        });
+        await sendParticipants(Number(jobId), Number(fileId));
+      } catch (e) {
+        socket.emit(EVENTS.ERROR, { message: (e as Error).message });
+      }
+    });
+
+    socket.on(EVENTS.COWATCH_LEAVE, async ({ jobId, fileId }: { jobId: number; fileId: number }) => {
+      socket.leave(cowatchRoom(Number(jobId), Number(fileId)));
+      await sendParticipants(Number(jobId), Number(fileId));
+    });
+
+    const persistCowatch = async (jobId: number, fileId: number, currentTimeSec: number, isPlaying: boolean) => {
+      try {
+        const existing = await sqlOne(
+          `SELECT id FROM "CoWatchSession" WHERE "fileId" = $1 AND "endedAt" IS NULL
+            ORDER BY "createdAt" DESC LIMIT 1`,
+          [fileId]
+        );
+        if (existing) {
+          await sql(
+            `UPDATE "CoWatchSession"
+                SET "currentTimeSec" = $1, "isPlaying" = $2, "lastUpdatedAt" = NOW()
+              WHERE id = $3`,
+            [currentTimeSec, isPlaying, existing.id]
+          );
+        } else {
+          await sql(
+            `INSERT INTO "CoWatchSession"
+               ("jobId","fileId","hostId","currentTimeSec","isPlaying","lastUpdatedAt","createdAt")
+             VALUES ($1,$2,$3,$4,$5,NOW(),NOW())`,
+            [jobId, fileId, socket.user.id, currentTimeSec, isPlaying]
+          );
+        }
+      } catch (e) {
+        logger.warn(`co-watch persist failed: ${(e as Error).message}`);
+      }
+    };
+
+    socket.on(EVENTS.COWATCH_PLAY, async ({ jobId, fileId, currentTimeSec }: { jobId: number; fileId: number; currentTimeSec: number }) => {
+      const room = cowatchRoom(Number(jobId), Number(fileId));
+      if (!socket.rooms.has(room)) return;
+      socket.to(room).emit(EVENTS.COWATCH_PLAY, { jobId, fileId, currentTimeSec, byUserId: socket.user.id });
+      await persistCowatch(Number(jobId), Number(fileId), Number(currentTimeSec), true);
+    });
+
+    socket.on(EVENTS.COWATCH_PAUSE, async ({ jobId, fileId, currentTimeSec }: { jobId: number; fileId: number; currentTimeSec: number }) => {
+      const room = cowatchRoom(Number(jobId), Number(fileId));
+      if (!socket.rooms.has(room)) return;
+      socket.to(room).emit(EVENTS.COWATCH_PAUSE, { jobId, fileId, currentTimeSec, byUserId: socket.user.id });
+      await persistCowatch(Number(jobId), Number(fileId), Number(currentTimeSec), false);
+    });
+
+    socket.on(EVENTS.COWATCH_SEEK, async ({ jobId, fileId, currentTimeSec }: { jobId: number; fileId: number; currentTimeSec: number }) => {
+      const room = cowatchRoom(Number(jobId), Number(fileId));
+      if (!socket.rooms.has(room)) return;
+      socket.to(room).emit(EVENTS.COWATCH_SEEK, { jobId, fileId, currentTimeSec, byUserId: socket.user.id });
+      await persistCowatch(Number(jobId), Number(fileId), Number(currentTimeSec), false);
+    });
 
     socket.on(EVENTS.DISCONNECT, () => {
       logger.info("User disconnected", { userId: socket.user.id });

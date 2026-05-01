@@ -66,9 +66,15 @@ class SocketClient {
     this.socket.emit(EVENTS.LEAVE_JOB_ROOM, { jobId });
   }
 
-  sendMessage(jobId, content, attachments = [], replyToId = null) {
+  sendMessage(jobId, content, attachments = [], replyToId = null, clientId = null) {
     this._ensureConnected();
-    this.socket.emit(EVENTS.SEND_MESSAGE, { jobId, content, attachments, replyToId });
+    this.socket.emit(EVENTS.SEND_MESSAGE, {
+      jobId,
+      content,
+      attachments,
+      replyToId,
+      clientId,
+    });
   }
 
   deleteMessage(jobId, messageId) {

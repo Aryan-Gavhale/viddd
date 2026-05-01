@@ -14,7 +14,7 @@ function Dashboard() {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const endpoint = role === "FREELANCER" ? "/profile/freelancer" : "/jobs";
+        const endpoint = role === "FREELANCER" ? "/profiles/freelancer" : "/jobs";
         const response = await axiosInstance.get(endpoint);
         setData(response.data.data);
       } catch (err) {

@@ -55,7 +55,7 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
   };
 
   useEffect(() => {
-    if (user?.token && isNotificationsOpen) {
+    if (user?.id && isNotificationsOpen) {
       fetchNotifications();
     }
   }, [user?.token, isNotificationsOpen]);
@@ -88,7 +88,7 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
         {
           name: "Dashboard",
           icon: <User className="w-4 h-4" />,
-          link: user?.role === "FREELANCER" ? "/editor-dashboard" : user?.role === "CLIENT" ? "/client-dashboard" : "/dashboard",
+          link: user?.role === "FREELANCER" ? "/editor/dashboard" : user?.role === "CLIENT" ? "/client/dashboard" : "/dashboard",
         },
         {
           name: "Workspace",
@@ -101,7 +101,7 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
         {
           name: "Profile",
           icon: <User className="w-4 h-4" />,
-          link: user?.role === "FREELANCER" ? "/freelancerProfile" : user?.role === "CLIENT" ? "/clientProfile" : "/dashboard",
+          link: user?.role === "FREELANCER" ? `/freelancers/${user?.id}` : user?.role === "CLIENT" ? "/client/profile" : "/dashboard",
         },
         { name: "Settings", icon: <Settings className="w-4 h-4" />, link: "/settings" },
       ],
@@ -133,7 +133,7 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
             {
               name: "Gigs Dashboard",
               icon: <Briefcase className="w-4 h-4" />,
-              link: "/gigs-dashboard",
+              link: "/editor/gigs",
             },
           ],
         },
@@ -143,7 +143,7 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
 
   return (
     <div className="hidden md:flex items-center space-x-4">
-      {user?.token ? (
+      {user?.id ? (
         <>
           <div className="relative" ref={notificationsRef}>
             <button

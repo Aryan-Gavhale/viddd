@@ -39,7 +39,7 @@ export default function GigDescriptionPage() {
     const fetchGig = async () => {
       try {
         setLoading(true)
-        const response = await axiosInstance.get(`/gig/${gigId}`)
+        const response = await axiosInstance.get(`/gigs/${gigId}`)
         console.log("Backend response:", response.data)
 
         if (!response.data || !response.data.data) {
@@ -710,7 +710,7 @@ export default function GigDescriptionPage() {
                         <div className="space-y-3">
                           <button
                             onClick={() =>
-                              navigate(`/gig/${gig.id}/${pkg.name}/project-brief`, { state: { gig, pkg } })
+                              navigate(`/checkout/${gig.id}/${pkg.name}`, { state: { gig, pkg } })
                             }
                             className={`w-full py-4 ${colors.button} text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1`}
                           >
@@ -843,7 +843,7 @@ export default function GigDescriptionPage() {
 
                     <div className="space-y-2">
                       <button
-                        onClick={() => navigate(`/gig/${gig.id}/${pkg.name}/project-brief`, { state: { gig, pkg } })}
+                        onClick={() => navigate(`/checkout/${gig.id}/${pkg.name}`, { state: { gig, pkg } })}
                         className={`w-full py-3 ${colors.button} text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg`}
                       >
                         Continue

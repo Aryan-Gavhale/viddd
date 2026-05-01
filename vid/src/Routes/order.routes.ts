@@ -58,7 +58,11 @@ const auth = [authenticateToken];
 
 export default async function routes(fastify: FastifyInstance, _opts: FastifyPluginOptions): Promise<void> {
   // Static routes first
-  fastify.post("/", { preHandler: [...auth, validateBody(createOrderSchema)], handler: wrapHandler(createOrder) });
+  fastify.post("/", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    preHandler: [...auth, validateBody(createOrderSchema)],
+    handler: wrapHandler(createOrder),
+  });
   fastify.get("/client", { preHandler: [...auth, validateQuery(getOrdersSchema)], handler: wrapHandler(getClientOrders) });
   fastify.get("/freelancer", { preHandler: [...auth, validateQuery(getOrdersSchema)], handler: wrapHandler(getFreelancerOrders) });
   fastify.get("/freelancer/active", { preHandler: auth, handler: wrapHandler(getFreelancerActiveOrders) });

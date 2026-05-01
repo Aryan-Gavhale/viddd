@@ -38,8 +38,8 @@ const GigDashboard = ({ gigId }) => {
       setLoading(true);
       try {
         const [gigResponse, analyticsResponse] = await Promise.all([
-          axiosInstance.get(`/gig/${gigId}`),
-          axiosInstance.get(`/gig/${gigId}/analytics`),
+          axiosInstance.get(`/gigs/${gigId}`),
+          axiosInstance.get(`/gigs/${gigId}/analytics`),
         ]);
 
         setGig(gigResponse.data.data);
@@ -59,7 +59,7 @@ const GigDashboard = ({ gigId }) => {
   const toggleGigStatus = async () => {
     try {
       const response = await axiosInstance.patch(
-        `/gig/${gigId}/pause`,
+        `/gigs/${gigId}/pause`,
         {}
       );
       setIsPaused(!isPaused);
@@ -71,7 +71,7 @@ const GigDashboard = ({ gigId }) => {
   };
 
   const copyGigLink = () => {
-    const link = `${window.location.origin}/gig/${gigId}`;
+    const link = `${window.location.origin}/gigs/${gigId}`;
     navigator.clipboard.writeText(link);
     toast.success("Gig link copied to clipboard");
   };
@@ -79,7 +79,7 @@ const GigDashboard = ({ gigId }) => {
   const deleteGig = async () => {
     if (!window.confirm("Are you sure you want to delete this gig?")) return;
     try {
-      await axiosInstance.delete(`/gig/${gigId}`);
+      await axiosInstance.delete(`/gigs/${gigId}`);
       toast.success("Gig deleted successfully");
       // Redirect or update UI as needed
     } catch (err) {

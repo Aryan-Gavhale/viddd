@@ -145,7 +145,7 @@ export default function ProjectBriefForm() {
   
         // ✅ 3️⃣ Navigate to payment page with order info
         navigate(
-          `/gig/${gigId}/${pkg.name}/project-brief/payment`,
+          `/checkout/${gigId}/${pkg.name}/payment`,
           {
             state: {
               gig,

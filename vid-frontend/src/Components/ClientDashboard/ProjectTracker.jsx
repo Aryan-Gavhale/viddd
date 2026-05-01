@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
+import { openChatWidget } from "../../hooks/useChat";
 import {
   Search,
   Filter,
@@ -150,6 +151,8 @@ export default function ProjectTracker() {
         // Add hired jobs to active projects
         const hiredJobsFormatted = hiredJobs.map((job) => ({
           id: job.id,
+          kind: "job",
+          jobId: job.id,
           title: job.title,
           status: "In Progress",
           editor: job.freelancer
@@ -167,7 +170,8 @@ export default function ProjectTracker() {
               }) + ", " + new Date(job.updatedAt).toLocaleDateString("en-US")
             : "N/A",
           budget: `₹${Number(job.budgetMin || 0).toLocaleString("en-IN")} - ₹${Number(job.budgetMax || 0).toLocaleString("en-IN")}`,
-          freelancerId: job.freelancerId,
+          freelancerId: job.freelancer_id || job.freelancerId,
+          freelancer: job.freelancer || null,
         }));
 
         const pendingJobsFormatted = pendingJobs.map((job) => ({
@@ -250,13 +254,22 @@ export default function ProjectTracker() {
       toast.info("Please hire a freelancer to start messaging.");
       return;
     }
-    console.log(`[ProjectTracker] Starting chat for order ${project.id} with freelancer ${project.freelancerId}`);
-    navigate(`/messages?freelancerId=${project.freelancerId}&orderId=${project.id}`);
+    const jobId = project.jobId || (project.kind === "job" ? project.id : null);
+    if (!jobId) {
+      toast.info("Chat is available for project-based hires (created via Jobs).");
+      return;
+    }
+    openChatWidget(jobId, {
+      id: project.freelancerId,
+      firstname: project.freelancer?.firstname || project.editor?.split(" ")[0],
+      lastname: project.freelancer?.lastname || project.editor?.split(" ").slice(1).join(" "),
+      avatar: project.freelancer?.profilePicture || project.editorAvatar,
+    });
   };
 
   const handleViewDetails = (project) => {
     console.log(`[ProjectTracker] Viewing details for ${activeTab === "pending" ? "job" : "order"} ${project.id}`);
-    navigate(activeTab === "pending" ? `/client-dashboard/job-applicants/${project.id}` : `/orders/${project.id}/details`);
+    navigate(activeTab === "pending" ? `/client/jobs/${project.id}/applicants` : `/orders/${project.id}/details`);
   };
 
   const handleRejectJob = async (jobId) => {

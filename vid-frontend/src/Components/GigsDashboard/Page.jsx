@@ -43,7 +43,7 @@ export default function GigDashboard() {
     setError(null);
     try {
       const [gigsResponse, pendingOrdersResponse, earningsResponse] = await Promise.all([
-        axiosInstance.get("/gig/freelancer"),
+        axiosInstance.get("/gigs/freelancer"),
         axiosInstance.get("/orders/pending"),
         axiosInstance.get("/transactions/earnings"),
       ]);
@@ -78,7 +78,7 @@ export default function GigDashboard() {
     if (!window.confirm("Are you sure you want to delete this gig?")) return;
 
     try {
-      const endpoint = isDraft ? `/gig/draft/${gigId}` : `/gig/${gigId}`;
+      const endpoint = isDraft ? `/gigs/draft/${gigId}` : `/gigs/${gigId}`;
       await axiosInstance.delete(endpoint);
       setGigs(gigs.filter(gig => gig.id !== gigId));
       fetchDashboardData(); // Refresh stats after deletion
@@ -93,7 +93,7 @@ export default function GigDashboard() {
   const handlePauseGig = async (gigId) => {
     try {
       setLoading(true);
-      const response = await axiosInstance.patch(`/gig/${gigId}/pause`, {});
+      const response = await axiosInstance.patch(`/gigs/${gigId}/pause`, {});
       
       // Update the gig's status locally to avoid a full refetch
       setGigs(prevGigs => 
@@ -119,12 +119,12 @@ export default function GigDashboard() {
 
   // Update a gig
   const handleUpdateGig = (gig) => {
-    navigate(`/update-gig/${gig.id}`);
+    navigate(`/editor/gigs/${gig.id}/edit`);
   };
 
   const handleUpdateSubmit = async (updatedData) => {
     try {
-      await axiosInstance.put(`/gig/${gigToUpdate.id}`, updatedData);
+      await axiosInstance.put(`/gigs/${gigToUpdate.id}`, updatedData);
       setShowUpdateModal(false);
       setGigToUpdate(null);
       fetchDashboardData();
@@ -185,7 +185,7 @@ export default function GigDashboard() {
             </div>
             <button className="mt-6 md:mt-0 group inline-flex items-center px-6 py-3 rounded-full text-purple-700 bg-white hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl">
               <Plus className="w-5 h-5 mr-2" />
-              <Link to="/create-gig">
+              <Link to="/editor/gigs/new">
                 <span className="font-medium">Create New Gig</span>
               </Link>
               <ArrowUpRight className="w-4 h-4 ml-2 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
@@ -349,7 +349,7 @@ export default function GigDashboard() {
               </div>
             ) : (
               filteredGigs.map(gig => (
-                <Link key={gig.id} to={`/gigs-dashboard/gig-detail/${gig.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Link key={gig.id} to={`/editor/gigs/${gig.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                   <div
                     className="group bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden transition-all hover:shadow-xl hover:-translate-y-1 duration-300"
                   >
@@ -400,7 +400,7 @@ export default function GigDashboard() {
                           <span className="text-xl font-bold text-gray-900">${gig.pricing[0]?.price || 0}</span>
                         </p>
                         <div className="flex space-x-1">
-                          <Link to={`/update-gig/${gig.id}`} onClick={e => e.stopPropagation()}>
+                          <Link to={`/editor/gigs/${gig.id}/edit`} onClick={e => e.stopPropagation()}>
                             <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
                               <Edit className="w-5 h-5 text-gray-500" />
                             </button>
@@ -479,7 +479,7 @@ export default function GigDashboard() {
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
-                                <Link to={`/gigs-dashboard/gig-detail/${gig.id}`}>{gig.title}</Link>
+                                <Link to={`/editor/gigs/${gig.id}`}>{gig.title}</Link>
                               </div>
                               <div className="text-xs text-gray-500">
                                 Updated {new Date(gig.updatedAt).toLocaleDateString()}
@@ -516,7 +516,7 @@ export default function GigDashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex space-x-2">
-                            <Link to={`/update-gig/${gig.id}`}>
+                            <Link to={`/editor/gigs/${gig.id}/edit`}>
                               <button className="text-indigo-600 hover:text-indigo-900 font-medium">
                                 Edit
                               </button>

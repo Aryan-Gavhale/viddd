@@ -79,7 +79,7 @@ const Navbar = () => {
         activeSection={activeSection}
         handleLinkClick={handleLinkClick}
         role={user?.role}
-        token={user?.token}
+        token={user?.id}
         firstname={user?.firstname}
         profilePicture={user?.profilePicture}
         handleLogout={handleLogout}

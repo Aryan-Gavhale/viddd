@@ -86,7 +86,7 @@ export default function EditorCard({ editor, onLike, isSaved }) {
         </div>
 
         <div className="flex gap-3">
-          <Link to={`/users/profile/${editor.id}`}>
+          <Link to={`/freelancers/${editor.id}`}>
           <button className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white py-2.5 px-4 rounded-lg hover:from-indigo-700 hover:to-indigo-600 transition-all duration-300 shadow-md hover:shadow-lg font-medium">
             View Profile
           </button>

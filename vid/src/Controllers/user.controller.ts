@@ -133,7 +133,17 @@ function buildFreelanceWhereClauses({
   location?: string;
   experienceLevel?: string;
 }) {
-  const conditions = [`u."role" = 'FREELANCER'`, `u."isActive" = true`];
+  // Only surface freelancers who have actually finished onboarding. We rely
+  // on the existing `isProfileComplete` flag (and the presence of a
+  // FreelancerProfile row) instead of adding a new column — same source of
+  // truth used everywhere else in the app.
+  const conditions = [
+    `u."role" = 'FREELANCER'`,
+    `u."isActive" = true`,
+    `u."isProfileComplete" = true`,
+    `fp."id" IS NOT NULL`,
+    `fp."jobTitle" IS NOT NULL AND fp."jobTitle" <> ''`,
+  ];
   const params: unknown[] = [];
   let n = 1;
   if (search) {
@@ -293,12 +303,11 @@ const loginUser: Handler = async (req, res, next) => {
       return next(new ApiError(400, "Email and password are required"));
     }
 
-    // Account lockout check — fail-closed when Redis is down
     const lockoutKey = `login_attempts:${email.toLowerCase()}`;
     let redisAvailable = true;
     try {
       const attempts = await redisClient.get(lockoutKey);
-      if (parseInt(attempts) >= MAX_LOGIN_ATTEMPTS) {
+      if (attempts && parseInt(attempts) >= MAX_LOGIN_ATTEMPTS) {
         const ttl = await redisClient.ttl(lockoutKey);
         return next(
           new ApiError(429, `Account locked due to too many failed attempts. Try again in ${Math.ceil(ttl / 60)} minutes.`)
@@ -306,8 +315,7 @@ const loginUser: Handler = async (req, res, next) => {
       }
     } catch {
       redisAvailable = false;
-      logger.warn("Redis unavailable during login — enforcing fail-closed lockout");
-      return next(new ApiError(503, "Authentication service temporarily unavailable. Please try again shortly."));
+      logger.warn("Redis unavailable during login — skipping lockout check");
     }
 
     const user = mapUserRow(
@@ -344,6 +352,16 @@ const loginUser: Handler = async (req, res, next) => {
     let freelancerProfile = null;
     if (user.role === "FREELANCER") {
       freelancerProfile = await sqlOne(`SELECT * FROM "FreelancerProfile" WHERE "user_id" = $1`, [user.id]);
+      // Self-heal: recompute isProfileComplete from current profile state
+      if (freelancerProfile) {
+        const fp = freelancerProfile as DbRow;
+        const { user_id, ...fprest } = fp;
+        const isComplete = !!isFreelancerProfileComplete({ ...fprest, userId: user_id } as never);
+        if (isComplete !== user.isProfileComplete) {
+          await sql(`UPDATE "User" SET "isProfileComplete" = $1, "updatedAt" = NOW() WHERE "id" = $2`, [isComplete, user.id]);
+          user.isProfileComplete = isComplete;
+        }
+      }
     }
 
     await issueAuthCookies(res, user as AuthUser);
@@ -402,6 +420,15 @@ const getUserProfile: Handler = async (req, res, next) => {
     let gigRows = [];
     let userBadgesWithBadge = [];
     const fp = await sqlOne(`SELECT * FROM "FreelancerProfile" WHERE "user_id" = $1`, [parsedUserId]);
+    // Self-heal isProfileComplete for own profile fetch
+    if (fp && isOwnProfile && user.role === "FREELANCER") {
+      const { user_id: _uid, ...fprest } = fp;
+      const isComplete = !!isFreelancerProfileComplete({ ...fprest, userId: _uid } as never);
+      if (isComplete !== user.isProfileComplete) {
+        await sql(`UPDATE "User" SET "isProfileComplete" = $1, "updatedAt" = NOW() WHERE "id" = $2`, [isComplete, user.id]);
+        user.isProfileComplete = isComplete;
+      }
+    }
     if (fp) {
       [portfolioVideos, gigRows, userBadgesWithBadge] = await Promise.all([
         sql(
@@ -614,10 +641,10 @@ const updateUser: Handler = async (req, res, next) => {
         equipmentLighting: equipmentLighting !== undefined ? equipmentLighting : fpBase?.equipmentLighting,
         equipmentOther: equipmentOther !== undefined ? equipmentOther : fpBase?.equipmentOther,
         certifications: certifications !== undefined ? certifications : fpBase?.certifications,
-        minimumRate: minimumRate !== undefined ? parseFloat(minimumRate) : fpBase?.minimumRate,
-        maximumRate: maximumRate !== undefined ? parseFloat(maximumRate) : fpBase?.maximumRate,
-        hourlyRate: hourlyRate !== undefined ? parseFloat(hourlyRate) : fpBase?.hourlyRate,
-        weeklyHours: weeklyHours !== undefined ? parseInt(weeklyHours, 10) : fpBase?.weeklyHours,
+        minimumRate: minimumRate !== undefined ? (minimumRate != null ? parseFloat(minimumRate) : null) : fpBase?.minimumRate,
+        maximumRate: maximumRate !== undefined ? (maximumRate != null ? parseFloat(maximumRate) : null) : fpBase?.maximumRate,
+        hourlyRate: hourlyRate !== undefined ? (hourlyRate != null ? parseFloat(hourlyRate) : null) : fpBase?.hourlyRate,
+        weeklyHours: weeklyHours !== undefined ? (weeklyHours != null ? parseInt(weeklyHours, 10) : null) : fpBase?.weeklyHours,
         availabilityStatus: availabilityStatus !== undefined ? availabilityStatus : fpBase?.availabilityStatus,
         experienceLevel: experienceLevel !== undefined ? experienceLevel : fpBase?.experienceLevel,
         services: services !== undefined ? services : fpBase?.services,
@@ -917,9 +944,9 @@ const getAllFreelancers: Handler = async (req, res, next) => {
     const { where, params: baseParams } = buildFreelanceWhereClauses({ search, skills, location, experienceLevel });
     const countSql = `SELECT COUNT(*)::int AS count FROM "User" u LEFT JOIN "FreelancerProfile" fp ON fp."user_id" = u."id" WHERE ${where}`;
 
-    const idSql = `SELECT u."id" FROM "User" u LEFT JOIN "FreelancerProfile" fp ON fp."user_id" = u."id" WHERE ${where} ORDER BY u."createdAt" DESC LIMIT ${
-      baseParams.length + 1
-    } OFFSET $${baseParams.length + 2}`;
+    const limitIdx = baseParams.length + 1;
+    const offsetIdx = baseParams.length + 2;
+    const idSql = `SELECT u."id" FROM "User" u LEFT JOIN "FreelancerProfile" fp ON fp."user_id" = u."id" WHERE ${where} ORDER BY u."createdAt" DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
 
     const [countRow, idRows] = await Promise.all([
       sqlOne(countSql, baseParams),
@@ -1105,8 +1132,9 @@ const getAllFreelancers: Handler = async (req, res, next) => {
       )
     );
   } catch (error) {
-    logger.error("Error retrieving freelancers: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve freelancers"));
+    const e = error as Error;
+    logger.error(`Error retrieving freelancers: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve freelancers: ${e.message}`));
   }
 };
 
@@ -1123,10 +1151,12 @@ const getFreelancerById: Handler = async (req, res, next) => {
     const freelancer = mapUserRow(
       await sqlOne(
         `SELECT u."id", u."firstname", u."lastname", u."username", u."bio", u."country", u."profilePicture",
-                u."createdAt", u."updatedAt", u."rating" AS "user_rating", fp."id" AS "fp_id"
+                u."createdAt", u."updatedAt", u."rating" AS "user_rating",
+                u."isProfileComplete" AS "user_isProfileComplete",
+                fp."id" AS "fp_id"
          FROM "User" u
          LEFT JOIN "FreelancerProfile" fp ON fp."user_id" = u."id"
-         WHERE u."id" = $1 AND u."role" = 'FREELANCER'`,
+         WHERE u."id" = $1 AND u."role" = 'FREELANCER' AND u."isActive" = true`,
         [userId]
       )
     );
@@ -1134,8 +1164,8 @@ const getFreelancerById: Handler = async (req, res, next) => {
     if (!freelancer) {
       return next(new ApiError(404, "Freelancer not found"));
     }
-    if (!freelancer.fp_id) {
-      return next(new ApiError(404, "Freelancer not found"));
+    if (!freelancer.fp_id || freelancer.user_isProfileComplete !== true) {
+      return next(new ApiError(404, "Freelancer profile not yet published"));
     }
 
     const fpId = freelancer.fp_id;
@@ -1194,8 +1224,12 @@ const getFreelancerById: Handler = async (req, res, next) => {
 
     return res.status(200).json(new ApiResponse(200, formattedFreelancer, "Freelancer retrieved successfully"));
   } catch (error) {
-    logger.error("Error retrieving freelancer: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve freelancer"));
+    if (error instanceof ApiError) {
+      return next(error);
+    }
+    const e = error as Error;
+    logger.error(`Error retrieving freelancer: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve freelancer: ${e.message}`));
   }
 };
 

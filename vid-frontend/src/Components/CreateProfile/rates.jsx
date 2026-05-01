@@ -5,7 +5,7 @@ export default function RatesAvailability({ onPrev, onSubmit, data }) {
     minimumRate: data.minimumRate || "",
     maximumRate: data.maximumRate || "",
     weeklyHours: data.weeklyHours || "",
-    availabilityStatus: data.availabilityStatus || "UNAVAILABLE",
+    availabilityStatus: data.availabilityStatus || "FULL_TIME",
     hourlyRate: data.hourlyRate || "",
     experienceLevel: data.experienceLevel || "ENTRY",
   })

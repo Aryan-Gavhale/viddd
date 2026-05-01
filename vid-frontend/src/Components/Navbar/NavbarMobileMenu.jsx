@@ -56,28 +56,28 @@ const NavbarMobileMenu = ({ isOpen, activeSection, handleLinkClick, role, token,
           <div className={`mt-2 space-y-1 ${isRoleDropdownOpen ? "block" : "hidden"}`}>
             {role === "FREELANCER" ? (
               <>
-                <Link to="/findwork" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/find-work" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   Find Work
                 </Link>
-                <Link to="/gigs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/editor/gigs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   My Gigs
                 </Link>
               </>
             ) : role === "CLIENT" ? (
               <>
-                <Link to="/hireeditor" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/gigs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   Explore Editors
                 </Link>
-                <Link to="/jobs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/client/jobs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   My Jobs
                 </Link>
               </>
             ) : (
               <>
-                <Link to="/findwork" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/find-work" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   Find Work
                 </Link>
-                <Link to="/hireeditor" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
+                <Link to="/gigs" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>
                   Explore Editors
                 </Link>
                 <Link to="/video-production" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50" onClick={() => handleLinkClick("role")}>

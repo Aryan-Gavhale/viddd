@@ -1,10 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { selectIsAuthenticated, selectUserRole, selectAuthLoading } from "../redux/userSlice";
+import { selectIsAuthenticated, selectUserRole, selectAuthLoading, selectUser } from "../redux/userSlice";
+
+const PROFILE_EXEMPT_PATHS = ["/create-profile", "/onboarding", "/settings", "/logout"];
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const role = useSelector(selectUserRole);
+  const user = useSelector(selectUser);
   const isLoading = useSelector(selectAuthLoading);
   const location = useLocation();
 
@@ -22,6 +25,15 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (allowedRoles && !allowedRoles.includes(role)) {
     return <Navigate to="/" replace />;
+  }
+
+  const isExempt = PROFILE_EXEMPT_PATHS.some((p) => location.pathname.startsWith(p));
+  if (
+    role === "FREELANCER" &&
+    user.isProfileComplete === false &&
+    !isExempt
+  ) {
+    return <Navigate to="/create-profile" replace />;
   }
 
   return children;

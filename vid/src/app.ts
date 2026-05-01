@@ -32,9 +32,71 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
     done();
   });
 
-  app.removeContentTypeParser("multipart");
-  app.addContentTypeParser("multipart", (_request: FastifyRequest, _payload: unknown, done: (err: null, body?: undefined) => void) => {
+  app.removeContentTypeParser("multipart/form-data");
+  app.addContentTypeParser("multipart/form-data", (_request: FastifyRequest, _payload: unknown, done: (err: null, body?: undefined) => void) => {
     done(null);
+  });
+
+  // Global error handler — must be registered before routes
+  const { ApiError } = await import("./Utils/ApiError.js");
+  const multerPkg = await import("multer");
+  const { captureException } = await import("./Utils/sentry.js");
+
+  app.setErrorHandler((error: FastifyError & { isJoi?: boolean; details?: Array<{ message: string }>; constraint?: string; errors?: unknown[] }, request: FastifyRequest, reply: FastifyReply) => {
+    if (error.isJoi) {
+      return reply.code(400).send({
+        statusCode: 400,
+        message: "Validation error",
+        errors: error.details?.map((d) => d.message) || [error.message],
+        success: false,
+      });
+    }
+
+    if (error instanceof ApiError || error.errors) {
+      const sc = error.statusCode || 500;
+      if (sc >= 500) {
+        winstonLogger.error(`${request.method} ${request.url} → ${sc}: ${error.message}`);
+        captureException(error, { method: request.method, url: request.url });
+      }
+      return reply.code(sc).send({
+        statusCode: sc,
+        message: error.message,
+        errors: error.errors || [],
+        success: false,
+      });
+    }
+
+    if (error instanceof multerPkg.default.MulterError) {
+      const codeMap: Record<string, number> = { LIMIT_FILE_SIZE: 413, LIMIT_FILE_COUNT: 400, LIMIT_UNEXPECTED_FILE: 400 };
+      const status = codeMap[error.code] || 400;
+      return reply.code(status).send({
+        statusCode: status,
+        message: `File upload error: ${error.message}`,
+        errors: [{ code: error.code, field: error.field }],
+        success: false,
+      });
+    }
+
+    if (error.statusCode === 429) {
+      return reply.code(429).send({ statusCode: 429, message: "Too many requests — please slow down", success: false });
+    }
+
+    if (error.code === "23505") {
+      return reply.code(409).send({ statusCode: 409, message: "A record with that value already exists", errors: [], success: false });
+    }
+    if (error.code === "23503") {
+      return reply.code(400).send({ statusCode: 400, message: "Referenced record does not exist", success: false });
+    }
+
+    captureException(error, { method: request.method, url: request.url, ip: request.ip });
+    winstonLogger.error(`Unhandled error on ${request.method} ${request.url}: ${error.message}`);
+    const statusCode = error.statusCode || 500;
+    return reply.code(statusCode).send({
+      statusCode,
+      message: process.env.NODE_ENV === "production" ? "Internal Server Error" : error.message || "Internal Server Error",
+      errors: [],
+      success: false,
+    });
   });
 
   // FIX #20: Enable CSP with sensible defaults
@@ -94,11 +156,20 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const redisUrl = process.env.REDIS_URL;
   let rateLimitRedis: InstanceType<typeof Redis> | null = null;
   if (redisUrl) {
-    rateLimitRedis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    });
-    (rateLimitOpts as Record<string, unknown>).redis = rateLimitRedis;
+    try {
+      rateLimitRedis = new Redis(redisUrl, {
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        lazyConnect: true,
+        retryStrategy: () => null as unknown as number,
+      });
+      rateLimitRedis.on("error", () => {});
+      await rateLimitRedis.connect();
+      (rateLimitOpts as Record<string, unknown>).redis = rateLimitRedis;
+    } catch {
+      if (rateLimitRedis) { try { rateLimitRedis.disconnect(); } catch {} }
+      rateLimitRedis = null;
+    }
   }
   (app as unknown as Record<string, unknown>)._rateLimitRedis = rateLimitRedis;
   await app.register(rateLimit, rateLimitOpts);
@@ -175,7 +246,6 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const { default: webhookRoutes } = await import("./Routes/webhook.routes.js");
   const { default: escrowRoutes } = await import("./Routes/escrow.routes.js");
   const { default: milestoneRoutes } = await import("./Routes/milestone.routes.js");
-  const { default: videoReviewRoutes } = await import("./Routes/videoReview.routes.js");
   const { default: briefRoutes } = await import("./Routes/brief.routes.js");
   const { default: renderFarmRoutes } = await import("./Routes/renderFarm.routes.js");
   const { default: skillTestRoutes } = await import("./Routes/skillTest.routes.js");
@@ -195,127 +265,79 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const { default: fileManagerRoutes } = await import("./Routes/fileManager.routes.js");
   const { default: thumbnailRoutes } = await import("./Routes/thumbnail.routes.js");
   const { default: emailVerificationRoutes } = await import("./Routes/emailVerification.routes.js");
+  const { default: workspaceRoutes } = await import("./Routes/workspace.routes.js");
 
+  // ── Auth & Identity ──
   await app.register(userRoutes, { prefix: "/api/v1/users" });
-  await app.register(jobRoutes, { prefix: "/api/v1/jobs" });
-  await app.register(profileRoutes, { prefix: "/api/v1/profile" });
-  await app.register(gigRoutes, { prefix: "/api/v1/gig" });
-  await app.register(orderRoutes, { prefix: "/api/v1/orders" });
-  await app.register(transactionRoutes, { prefix: "/api/v1/transactions" });
-  await app.register(reviewRoutes, { prefix: "/api/v1/reviews" });
-  await app.register(messageRoutes, { prefix: "/api/v1/messages" });
-  await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
-  await app.register(disputeRoutes, { prefix: "/api/v1/disputes" });
-  await app.register(searchRoutes, { prefix: "/api/v1/search" });
-  await app.register(adminRoutes, { prefix: "/api/v1/admin" });
-  await app.register(analyticsRoutes, { prefix: "/api/v1/analytics" });
-  await app.register(referralRoutes, { prefix: "/api/v1/referrals" });
-  await app.register(promotionRoutes, { prefix: "/api/v1/promotions" });
-  await app.register(freelancerRoutes, { prefix: "/api/v1/freelancer" });
-  await app.register(portfolioRoutes, { prefix: "/api/v1/portfolio" });
-  await app.register(contactRoutes, { prefix: "/api/v1/contact" });
-  await app.register(timelineRoutes, { prefix: "/api/v1/timeline" });
-  await app.register(applicationRoutes, { prefix: "/api/v1/applications" });
-  await app.register(filesRoutes, { prefix: "/api/v1/files" });
-  await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
-  await app.register(escrowRoutes, { prefix: "/api/v1/escrow" });
-  await app.register(milestoneRoutes, { prefix: "/api/v1/milestones" });
-  await app.register(videoReviewRoutes, { prefix: "/api/v1/video-review" });
-  await app.register(briefRoutes, { prefix: "/api/v1/briefs" });
-  await app.register(renderFarmRoutes, { prefix: "/api/v1/render-farm" });
-  await app.register(skillTestRoutes, { prefix: "/api/v1/skill-tests" });
-  await app.register(teamProposalRoutes, { prefix: "/api/v1/team-proposals" });
-  await app.register(matchingRoutes, { prefix: "/api/v1/matching" });
-  await app.register(demoReelRoutes, { prefix: "/api/v1/demo-reels" });
-  await app.register(templateRoutes, { prefix: "/api/v1/templates" });
-  await app.register(revisionRoutes, { prefix: "/api/v1/revisions" });
-  await app.register(communityRoutes, { prefix: "/api/v1/community" });
-  await app.register(blogRoutes, { prefix: "/api/v1/blog" });
-  await app.register(subCategoryRoutes, { prefix: "/api/v1/sub-categories" });
-  await app.register(autoBadgeRoutes, { prefix: "/api/v1/auto-badges" });
-  await app.register(revenueRoutes, { prefix: "/api/v1/revenue" });
-  await app.register(invoiceRoutes, { prefix: "/api/v1/invoices" });
-  await app.register(calendarRoutes, { prefix: "/api/v1/calendar" });
-  await app.register(contractRoutes, { prefix: "/api/v1/contracts" });
-  await app.register(fileManagerRoutes, { prefix: "/api/v1/project-files" });
-  await app.register(thumbnailRoutes, { prefix: "/api/v1/thumbnails" });
   await app.register(emailVerificationRoutes, { prefix: "/api/v1/email" });
 
-  const { ApiError } = await import("./Utils/ApiError.js");
-  const multer = await import("multer");
-  const logger = winstonLogger;
-  const { captureException } = await import("./Utils/sentry.js");
+  // ── Core Resources (RESTful, plural nouns) ──
+  await app.register(profileRoutes, { prefix: "/api/v1/profiles" });
+  await app.register(freelancerRoutes, { prefix: "/api/v1/freelancers" });
+  await app.register(gigRoutes, { prefix: "/api/v1/gigs" });
+  await app.register(jobRoutes, { prefix: "/api/v1/jobs" });
+  await app.register(workspaceRoutes, { prefix: "/api/v1/workspace" });
+  await app.register(applicationRoutes, { prefix: "/api/v1/applications" });
+  await app.register(orderRoutes, { prefix: "/api/v1/orders" });
+  await app.register(milestoneRoutes, { prefix: "/api/v1/milestones" });
+  await app.register(transactionRoutes, { prefix: "/api/v1/transactions" });
+  await app.register(escrowRoutes, { prefix: "/api/v1/escrow" });
 
-  app.setErrorHandler((error: FastifyError & { isJoi?: boolean; details?: Array<{ message: string }>; constraint?: string }, request: FastifyRequest, reply: FastifyReply) => {
-    if (error.isJoi) {
-      return reply.code(400).send({
-        statusCode: 400,
-        message: "Validation error",
-        errors: error.details?.map((d) => d.message) || [error.message],
-        success: false,
-      });
-    }
+  // ── Messaging & Notifications ──
+  await app.register(messageRoutes, { prefix: "/api/v1/messages" });
+  await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
 
-    if (error instanceof ApiError) {
-      if (error.statusCode >= 500) {
-        logger.error("%s %s → %d: %s", request.method, request.url, error.statusCode, error.message);
-        captureException(error, { method: request.method, url: request.url });
-      }
-      return reply.code(error.statusCode).send({
-        statusCode: error.statusCode,
-        message: error.message,
-        errors: error.errors || [],
-        success: false,
-      });
-    }
+  // ── Reviews & Disputes ──
+  await app.register(reviewRoutes, { prefix: "/api/v1/reviews" });
+  await app.register(disputeRoutes, { prefix: "/api/v1/disputes" });
 
-    if (error instanceof multer.default.MulterError) {
-      const codeMap: Record<string, number> = { LIMIT_FILE_SIZE: 413, LIMIT_FILE_COUNT: 400, LIMIT_UNEXPECTED_FILE: 400 };
-      const status = codeMap[error.code] || 400;
-      return reply.code(status).send({
-        statusCode: status,
-        message: `File upload error: ${error.message}`,
-        errors: [{ code: error.code, field: error.field }],
-        success: false,
-      });
-    }
+  // ── Portfolio & Media ──
+  await app.register(portfolioRoutes, { prefix: "/api/v1/portfolios" });
+  await app.register(demoReelRoutes, { prefix: "/api/v1/demo-reels" });
+  await app.register(thumbnailRoutes, { prefix: "/api/v1/thumbnails" });
+  // Video Review (Frame.io-style) is now scoped under workspace at:
+  //   /api/v1/workspace/projects/:jobId/files/:fileId/review/...
 
-    if (error.statusCode === 429) {
-      return reply.code(429).send({
-        statusCode: 429,
-        message: "Too many requests — please slow down",
-        success: false,
-      });
-    }
+  // ── Project Management ──
+  await app.register(timelineRoutes, { prefix: "/api/v1/timelines" });
+  await app.register(revisionRoutes, { prefix: "/api/v1/revisions" });
+  await app.register(fileManagerRoutes, { prefix: "/api/v1/project-files" });
+  await app.register(filesRoutes, { prefix: "/api/v1/files" });
+  await app.register(briefRoutes, { prefix: "/api/v1/briefs" });
 
-    if (error.code === "23505") {
-      return reply.code(409).send({
-        statusCode: 409,
-        message: "A record with that value already exists",
-        errors: [],
-        success: false,
-      });
-    }
-    if (error.code === "23503") {
-      return reply.code(400).send({
-        statusCode: 400,
-        message: "Referenced record does not exist",
-        success: false,
-      });
-    }
+  // ── Collaboration ──
+  await app.register(teamProposalRoutes, { prefix: "/api/v1/team-proposals" });
+  await app.register(matchingRoutes, { prefix: "/api/v1/matching" });
+  await app.register(skillTestRoutes, { prefix: "/api/v1/skill-tests" });
+  await app.register(renderFarmRoutes, { prefix: "/api/v1/render-farm" });
 
-    captureException(error, { method: request.method, url: request.url, ip: request.ip });
-    logger.error("Unhandled error on %s %s: %s", request.method, request.url, error.message);
-    const statusCode = error.statusCode || 500;
-    return reply.code(statusCode).send({
-      statusCode,
-      message: process.env.NODE_ENV === "production"
-        ? "Internal Server Error"
-        : error.message || "Internal Server Error",
-      errors: [],
-      success: false,
-    });
-  });
+  // ── Marketplace ──
+  await app.register(templateRoutes, { prefix: "/api/v1/templates" });
+  await app.register(searchRoutes, { prefix: "/api/v1/search" });
+  await app.register(subCategoryRoutes, { prefix: "/api/v1/sub-categories" });
+
+  // ── Community & Content ──
+  await app.register(communityRoutes, { prefix: "/api/v1/community" });
+  await app.register(blogRoutes, { prefix: "/api/v1/blog" });
+
+  // ── Billing & Revenue ──
+  await app.register(invoiceRoutes, { prefix: "/api/v1/invoices" });
+  await app.register(contractRoutes, { prefix: "/api/v1/contracts" });
+  await app.register(calendarRoutes, { prefix: "/api/v1/calendar" });
+  await app.register(promotionRoutes, { prefix: "/api/v1/promotions" });
+  await app.register(referralRoutes, { prefix: "/api/v1/referrals" });
+  await app.register(revenueRoutes, { prefix: "/api/v1/revenue" });
+
+  // ── Gamification ──
+  await app.register(autoBadgeRoutes, { prefix: "/api/v1/auto-badges" });
+
+  // ── Admin ──
+  await app.register(adminRoutes, { prefix: "/api/v1/admin" });
+  await app.register(analyticsRoutes, { prefix: "/api/v1/analytics" });
+
+  // ── External ──
+  await app.register(contactRoutes, { prefix: "/api/v1/contact" });
+  await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
 
   return app;
 }

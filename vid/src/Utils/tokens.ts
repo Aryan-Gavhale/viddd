@@ -102,14 +102,16 @@ export async function generateRefreshToken(user: AuthUser | DbRow): Promise<{
     { expiresIn: REFRESH_TTL }
   );
 
-  // Track only the current jti per user (single-session by default). We could
-  // promote this to a per-device family later by indexing by deviceId.
-  await redisClient.set(
-    refreshFamilyKey(Number(user.id)),
-    jti,
-    "EX",
-    REFRESH_TTL_SECONDS
-  );
+  try {
+    await redisClient.set(
+      refreshFamilyKey(Number(user.id)),
+      jti,
+      "EX",
+      REFRESH_TTL_SECONDS
+    );
+  } catch {
+    logger.warn("Redis unavailable — refresh token family not tracked for user %s", user.id);
+  }
 
   return { token, jti, ttlSeconds: REFRESH_TTL_SECONDS };
 }
@@ -138,18 +140,18 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Refres
   }
 
   const userId = Number(decoded.id);
-  const expectedJti = await redisClient.get(refreshFamilyKey(userId));
-
-  if (!expectedJti) {
-    // Family was revoked (logout, password change, or never existed).
-    throw new Error("Refresh token revoked");
+  let expectedJti: string | null = null;
+  try {
+    expectedJti = await redisClient.get(refreshFamilyKey(userId));
+  } catch {
+    logger.warn("Redis unavailable during refresh — skipping jti check for user %s", userId);
   }
 
-  if (expectedJti !== decoded.jti) {
-    // Someone is presenting an old/stolen jti while a newer one already
-    // rotated in. Treat as token theft: kill the family entirely.
-    await redisClient.del(refreshFamilyKey(userId));
-    throw new Error("Refresh token reuse detected; session revoked");
+  if (expectedJti !== null) {
+    if (expectedJti !== decoded.jti) {
+      try { await redisClient.del(refreshFamilyKey(userId)); } catch { /* noop */ }
+      throw new Error("Refresh token reuse detected; session revoked");
+    }
   }
 
   const userShape: AuthUser = {
@@ -171,7 +173,11 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Refres
 
 /** Revoke a user's refresh token family — used on logout / password change. */
 export async function revokeRefreshFamily(userId: number): Promise<void> {
-  await redisClient.del(refreshFamilyKey(userId));
+  try {
+    await redisClient.del(refreshFamilyKey(userId));
+  } catch {
+    logger.warn("Redis unavailable — could not revoke refresh family for user %s", userId);
+  }
 }
 
 export const tokenTtl = {

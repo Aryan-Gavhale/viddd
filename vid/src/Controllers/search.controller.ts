@@ -266,4 +266,107 @@ const searchFreelancers: ControllerHandler = async (req, res, next) => {
   }
 };
 
-export { searchGigs, searchFreelancers };
+/**
+ * Unified search suggestions for the navbar typeahead. Returns at most
+ * `limit` results from each of: gigs, freelancers, jobs — chosen by full-text
+ * match on title/skills/etc. Falls back to ILIKE when the FTS index isn't
+ * primed for the term. Public — no auth required so the homepage navbar
+ * works for anonymous visitors.
+ */
+const searchSuggestions: ControllerHandler = async (req, res, next) => {
+  try {
+    const raw = qs(req.query, "q", "").trim();
+    const limit = Math.min(8, Math.max(1, parseInt(qs(req.query, "limit", "5"), 10) || 5));
+    if (raw.length < 2) {
+      return res.status(200).json(
+        new ApiResponse(200, { gigs: [], freelancers: [], jobs: [] }, "Type at least 2 characters")
+      );
+    }
+    const like = `%${raw}%`;
+
+    const [gigs, freelancers, jobs] = await Promise.all([
+      sql(
+        `SELECT g.id, g.title, g."thumbnailUrl", g.pricing,
+                u.firstname AS f_fn, u.lastname AS f_ln, u."profilePicture" AS f_pp
+           FROM "Gig" g
+           JOIN "FreelancerProfile" fp ON fp.id = g."freelancer_id"
+           JOIN "User" u ON u.id = fp."user_id"
+          WHERE g."status" = 'ACTIVE'::"GigStatus"
+            AND g."deletedAt" IS NULL
+            AND (g."title" ILIKE $1 OR g."description" ILIKE $1 OR g."category" ILIKE $1)
+          ORDER BY g."views" DESC, g."createdAt" DESC
+          LIMIT $2`,
+        [like, limit]
+      ),
+      sql(
+        `SELECT u.id, u.firstname, u.lastname, u."profilePicture", u."rating",
+                fp."jobTitle", fp."skills"
+           FROM "User" u
+           JOIN "FreelancerProfile" fp ON fp."user_id" = u.id
+          WHERE u."role" = 'FREELANCER'
+            AND u."isActive" = true
+            AND u."isProfileComplete" = true
+            AND (u."firstname" ILIKE $1 OR u."lastname" ILIKE $1
+                 OR fp."jobTitle" ILIKE $1
+                 OR EXISTS (SELECT 1 FROM unnest(fp."skills") s WHERE s ILIKE $1))
+          ORDER BY u."rating" DESC NULLS LAST, u."createdAt" DESC
+          LIMIT $2`,
+        [like, limit]
+      ),
+      sql(
+        `SELECT j.id, j.title, j."budgetMin", j."budgetMax",
+                j."status"::text AS status, j."deadline"
+           FROM "Job" j
+          WHERE j."status" = 'OPEN'::"JobStatus"
+            AND j."deletedAt" IS NULL
+            AND (j."title" ILIKE $1 OR j."description" ILIKE $1)
+          ORDER BY j."createdAt" DESC
+          LIMIT $2`,
+        [like, limit]
+      ),
+    ]);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          gigs: gigs.map((g) => ({
+            id: Number(g.id),
+            title: g.title,
+            thumbnailUrl: g.thumbnailUrl,
+            pricing: g.pricing,
+            freelancer: {
+              firstname: g.f_fn,
+              lastname: g.f_ln,
+              profilePicture: g.f_pp,
+            },
+          })),
+          freelancers: freelancers.map((f) => ({
+            id: Number(f.id),
+            firstname: f.firstname,
+            lastname: f.lastname,
+            profilePicture: f.profilePicture,
+            rating: f.rating == null ? null : Number(f.rating),
+            jobTitle: f.jobTitle,
+            skills: f.skills,
+          })),
+          jobs: jobs.map((j) => ({
+            id: Number(j.id),
+            title: j.title,
+            budgetMin: j.budgetMin == null ? null : Number(j.budgetMin),
+            budgetMax: j.budgetMax == null ? null : Number(j.budgetMax),
+            status: j.status,
+            deadline: j.deadline,
+          })),
+        },
+        "Search suggestions"
+      )
+    );
+  } catch (error) {
+    const e = error as Error;
+    logger.error(`Error in search suggestions: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Search suggestions failed: ${e.message}`));
+  }
+};
+
+export { searchGigs, searchFreelancers, searchSuggestions };

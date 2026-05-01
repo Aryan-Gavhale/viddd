@@ -127,7 +127,7 @@ export default function ContactPage() {
     });
 
     try {
-      const response = await axiosInstance.post("/contact", formDataToSend, {
+      const response = await axiosInstance.post("/contact/submit", formDataToSend, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

@@ -24,7 +24,7 @@ export default function PortfolioManager() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { data: body } = await axiosInstance.get("/portfolio/stats")
+      const { data: body } = await axiosInstance.get("/portfolios/stats")
       const p = body?.data
       if (p) {
         setMetrics(p.metrics || [])
@@ -51,7 +51,7 @@ export default function PortfolioManager() {
     }
     setSaving(true)
     try {
-      await axiosInstance.post("/portfolio", {
+      await axiosInstance.post("/portfolios", {
         title: form.title || undefined,
         description: form.description || undefined,
         videoUrl: form.videoUrl.trim(),
@@ -82,7 +82,7 @@ export default function PortfolioManager() {
     if (!editing) return
     setSaving(true)
     try {
-      await axiosInstance.put(`/portfolio/${editing.id}`, {
+      await axiosInstance.put(`/portfolios/${editing.id}`, {
         title: editForm.title,
         description: editForm.description,
         category: editForm.category,
@@ -105,7 +105,7 @@ export default function PortfolioManager() {
     if (!deleting) return
     setDeleteBusy(true)
     try {
-      await axiosInstance.delete(`/portfolio/${deleting.id}`)
+      await axiosInstance.delete(`/portfolios/${deleting.id}`)
       toast.success("Video removed from portfolio")
       setDeleting(null)
       void load()

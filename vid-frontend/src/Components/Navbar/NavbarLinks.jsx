@@ -43,10 +43,9 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
 
   const roleLabel = role === "FREELANCER" ? "Find Work" : role === "CLIENT" ? "Explore Editors" : "Services"
 
-  const handleSearch = (query) => {
-    console.log("Searching for:", query)
-    // Implement search logic here
-  }
+  // SearchBar handles navigation internally; we keep this as a no-op so any
+  // future analytics hook has a stable callback to wire into.
+  const handleSearch = () => {}
 
   const roleIcons = {
     "Find Work": <Briefcase className="w-4 h-4" />,
@@ -129,7 +128,7 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
                     Freelancer Options
                   </div>
                   <Link
-                    to="/findwork"
+                    to="/find-work"
                     className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors duration-200"
                     onClick={() => handleLinkClick("role")}
                   >
@@ -142,7 +141,7 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
                     </div>
                   </Link>
                   <Link
-                    to="/gigs-dashboard"
+                    to="/editor/gigs"
                     className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors duration-200"
                     onClick={() => handleLinkClick("role")}
                   >
@@ -161,7 +160,7 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
                     Client Options
                   </div>
                   <Link
-                    to="/hireeditor"
+                    to="/gigs"
                     className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors duration-200"
                     onClick={() => handleLinkClick("role")}
                   >
@@ -174,7 +173,7 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
                     </div>
                   </Link>
                   <Link
-                    to="/jobs"
+                    to="/client/jobs"
                     className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors duration-200"
                     onClick={() => handleLinkClick("role")}
                   >
@@ -193,8 +192,8 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
                     Available Services
                   </div>
                   {[
-                    { name: "Find Work", path: "/findwork", desc: "Browse available projects" },
-                    { name: "Explore Editors", path: "/hireeditor", desc: "Find talented professionals" },
+                    { name: "Find Work", path: "/find-work", desc: "Browse available projects" },
+                    { name: "Explore Editors", path: "/gigs", desc: "Find talented professionals" },
                   ].map((item) => (
                     <Link
                       key={item.name}

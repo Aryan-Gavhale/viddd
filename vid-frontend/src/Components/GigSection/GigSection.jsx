@@ -140,7 +140,7 @@ export default function PremiumMarketplace() {
         setLoading(true);
 
         // Fetch gigs (unchanged)
-        const gigResponse = await axiosInstance.get("/gig/all");
+        const gigResponse = await axiosInstance.get("/gigs/all");
         const fetchedGigs = gigResponse.data.data.gigs;
 
         const formattedGigs = fetchedGigs.map((gig) => ({
@@ -714,7 +714,7 @@ export default function PremiumMarketplace() {
                   boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)",
                   transition: { duration: 0.2 },
                 }}
-                onClick={() => navigate(`/gig/${gig.id}`)}
+                onClick={() => navigate(`/gigs/${gig.id}`)}
               >
                 <div className="relative aspect-[16/9] overflow-hidden">
                   <img
@@ -810,7 +810,7 @@ export default function PremiumMarketplace() {
                   boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)",
                   transition: { duration: 0.2 },
                 }}
-                onClick={() => navigate(`/freelancerProfile/${editor.id}`)} // Navigate to freelancer profile
+                onClick={() => navigate(`/freelancers/${editor.id}`)} // Navigate to freelancer profile
               >
                 <div className="relative p-6">
                   <motion.button
