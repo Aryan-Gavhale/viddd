@@ -9,12 +9,14 @@ import {
   Download,
   CheckCircle2,
   AlertCircle,
+  Lock,
   Trash2,
   Eye,
   Loader2,
   X,
   Paperclip,
   MessageSquare,
+  Send,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios.js";
@@ -44,10 +46,48 @@ const STATUS_LABEL = {
   ARCHIVED: "Archived",
 };
 
-export function FilesTab({ jobId, role, onChanged }) {
+const MEDIA_TONE = {
+  PENDING: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  SCANNING: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  PROCESSING: "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+  READY: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  PLACEHOLDER: "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  FAILED: "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
+  QUARANTINED: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+};
+
+function mediaLabel(status) {
+  if (!status) return "Legacy file";
+  if (status === "PLACEHOLDER") return "Workflow test file";
+  return status.replaceAll("_", " ").toLowerCase();
+}
+
+const PLACEHOLDER_BANNER_COPY = "Workflow test file — no real video stored. Useful for exercising the approval/delivery flow locally; do not treat as a deliverable.";
+
+function isStorageCredentialsError(error) {
+  const message = `${error?.response?.data?.message || ""} ${error?.message || ""}`.toLowerCase();
+  return (
+    message.includes("could not load credentials") ||
+    message.includes("credential") ||
+    message.includes("s3 bucket is not configured") ||
+    message.includes("aws")
+  );
+}
+
+function devPlaceholderUrl(file, jobId) {
+  return `dev-placeholder://job/${jobId}/${Date.now()}-${encodeURIComponent(file.name)}`;
+}
+
+function allowDevPlaceholderUploads() {
+  return import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_PLACEHOLDER_UPLOADS === "true";
+}
+
+export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
   const [files, setFiles] = useState([]);
+  const [delivery, setDelivery] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deliveryAction, setDeliveryAction] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [filter, setFilter] = useState("all");
   const [reviewFile, setReviewFile] = useState(null);
@@ -56,11 +96,14 @@ export function FilesTab({ jobId, role, onChanged }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    axiosInstance
-      .get(`/workspace/projects/${jobId}/files`)
-      .then((res) => {
+    Promise.all([
+      axiosInstance.get(`/workspace/projects/${jobId}/files`),
+      axiosInstance.get(`/deliveries/JOB/${jobId}`).catch(() => null),
+    ])
+      .then(([res, deliveryRes]) => {
         if (!alive) return;
         setFiles(res.data?.data?.files || []);
+        setDelivery(deliveryRes?.data?.data || null);
       })
       .catch(() => {
         if (alive) toast.error("Failed to load project files");
@@ -89,9 +132,17 @@ export function FilesTab({ jobId, role, onChanged }) {
       setUploading(true);
       setUploadProgress({ name: file.name, percent: 0 });
 
-      let url = null;
+      if (!file.type.startsWith("video/")) {
+        toast.info("For now only video uploads are supported here. Use chat for other files.");
+        setUploading(false);
+        setUploadProgress(null);
+        return;
+      }
 
-      if (file.type.startsWith("video/")) {
+      let url = null;
+      let usedDevPlaceholder = false;
+
+      try {
         // Use the multipart-aware /files API for big videos.
         const initRes = await axiosInstance.post("/files/initiate-upload", {
           fileName: file.name,
@@ -128,11 +179,12 @@ export function FilesTab({ jobId, role, onChanged }) {
           parts,
         });
         url = completeRes.data.data?.url || key;
-      } else {
-        toast.info("For now only video uploads are supported here. Use chat for other files.");
-        setUploading(false);
-        setUploadProgress(null);
-        return;
+      } catch (uploadError) {
+        if (!isStorageCredentialsError(uploadError)) throw uploadError;
+        if (!allowDevPlaceholderUploads()) throw uploadError;
+        usedDevPlaceholder = true;
+        url = devPlaceholderUrl(file, jobId);
+        setUploadProgress({ name: file.name, percent: 100 });
       }
 
       const created = await axiosInstance.post(`/workspace/projects/${jobId}/files`, {
@@ -140,11 +192,16 @@ export function FilesTab({ jobId, role, onChanged }) {
         url,
         mimeType: file.type,
         size: file.size,
-        category: "deliverable",
+      category: "deliverable",
+      note: "Watermarked review cut",
       });
 
       setFiles((prev) => [created.data?.data, ...prev]);
-      toast.success("File added to project");
+      toast.success(
+        usedDevPlaceholder
+          ? "Workflow test file added — no real video stored. Use only for testing the approval flow."
+          : "File added to project"
+      );
       onChanged?.();
     } catch (e) {
       console.error(e);
@@ -155,16 +212,57 @@ export function FilesTab({ jobId, role, onChanged }) {
     }
   };
 
-  const handleStatus = async (fileId, status) => {
+  const refreshDelivery = async () => {
+    const res = await axiosInstance.get(`/deliveries/JOB/${jobId}`).catch(() => null);
+    setDelivery(res?.data?.data || null);
+  };
+
+  const sendForApproval = async (file) => {
+    if (!file?.id) return;
+    setDeliveryAction(`submit-${file.id}`);
     try {
-      const res = await axiosInstance.patch(`/workspace/projects/${jobId}/files/${fileId}`, {
-        status,
+      const note = file.note || `Review cut ready: ${file.fileName}`;
+      await axiosInstance.post(`/deliveries/JOB/${jobId}/submit-final`, {
+        reviewFileIds: [Number(file.id)],
+        releaseNotes: note,
+        sourceIncluded: false,
       });
-      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, ...res.data.data, status } : f)));
-      toast.success(`Marked as ${STATUS_LABEL[status]}`);
+      toast.success("Review cut sent to client for approval");
+      await refreshDelivery();
       onChanged?.();
     } catch (e) {
-      toast.error(e?.response?.data?.message || "Could not update status");
+      toast.error(e?.response?.data?.message || "Could not send review cut");
+    } finally {
+      setDeliveryAction(null);
+    }
+  };
+
+  const reviewDeliveryAction = async (action, file) => {
+    const latest = delivery?.latest;
+    if (!latest?.id) return;
+    const note =
+      action === "approve"
+        ? "Review cut approved"
+        : action === "request-changes"
+          ? prompt("What changes should the editor make?") || ""
+          : prompt("Why are you opening a dispute?") || "";
+    if (action !== "approve" && !note.trim()) return;
+    if (action === "approve" && !confirm("Approve this review cut and unlock final delivery?")) return;
+    setDeliveryAction(`${action}-${file.id}`);
+    try {
+      const endpoint =
+        action === "request-changes"
+          ? `/deliveries/${latest.id}/request-changes`
+          : `/deliveries/${latest.id}/${action}`;
+      const payload = action === "dispute" ? { reason: note } : { reviewNote: note };
+      await axiosInstance.post(endpoint, payload);
+      toast.success(action === "approve" ? "Review approved. Delivery is unlocked." : action === "dispute" ? "Dispute opened" : "Changes requested");
+      await refreshDelivery();
+      onChanged?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Review action failed");
+    } finally {
+      setDeliveryAction(null);
     }
   };
 
@@ -205,7 +303,7 @@ export function FilesTab({ jobId, role, onChanged }) {
           <button
             type="button"
             onClick={handlePickFile}
-            disabled={uploading}
+            disabled={uploading || readOnly}
             className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {uploading ? (
@@ -213,7 +311,7 @@ export function FilesTab({ jobId, role, onChanged }) {
             ) : (
               <Upload className="w-4 h-4" />
             )}
-            {uploading ? "Uploading…" : "Upload video"}
+            {readOnly ? "Archived" : uploading ? "Uploading…" : "Upload review cut"}
           </button>
           <input
             ref={fileInputRef}
@@ -251,10 +349,12 @@ export function FilesTab({ jobId, role, onChanged }) {
               key={f.id}
               file={f}
               role={role}
-              onReview={() => setReviewFile(f)}
-              onApprove={() => handleStatus(f.id, "APPROVED")}
-              onRequestChanges={() => handleStatus(f.id, "CHANGES_REQUESTED")}
-              onArchive={() => handleStatus(f.id, "ARCHIVED")}
+              readOnly={readOnly}
+              delivery={delivery}
+              deliveryAction={deliveryAction}
+              onReview={(protectedReview) => setReviewFile({ ...f, protectedReview })}
+              onSendForApproval={() => sendForApproval(f)}
+              onDeliveryReview={(action) => reviewDeliveryAction(action, f)}
               onDelete={() => handleDelete(f.id)}
             />
           ))}
@@ -277,28 +377,81 @@ export function FilesTab({ jobId, role, onChanged }) {
   );
 }
 
-function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive, onDelete }) {
+function FileCard({
+  file,
+  role,
+  readOnly,
+  delivery,
+  deliveryAction,
+  onReview,
+  onSendForApproval,
+  onDeliveryReview,
+  onDelete,
+}) {
+  const [mediaState, setMediaState] = useState(null);
   const Icon = pickIcon(file.mimeType);
   const isClient = role === "client";
+  const isEditor = role === "freelancer";
   const isVideo = file.mimeType?.startsWith("video/");
+  useEffect(() => {
+    let alive = true;
+    if (!isVideo || !file?.id) {
+      setMediaState(null);
+      return undefined;
+    }
+    axiosInstance
+      .get(`/media/assets/${file.id}`)
+      .then((res) => {
+        if (alive) setMediaState(res.data?.data || null);
+      })
+      .catch(() => {
+        if (alive) setMediaState(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [file?.id, isVideo]);
+  const media = mediaState?.asset || file.media || null;
+  const mediaStatus = media?.status;
+  const mediaUrls = mediaState?.urls || {};
+  const previewUrl = mediaUrls.watermarked?.url || mediaUrls.preview?.url || file.url;
+  const posterUrl = mediaUrls.poster?.url;
+  const mediaBlocked = ["FAILED", "QUARANTINED"].includes(mediaStatus);
+  const mediaPending = Boolean(mediaStatus && !["READY", "PLACEHOLDER"].includes(mediaStatus));
   const openCount = Number(file.openCommentCount || 0);
   const totalCount = Number(file.totalCommentCount || 0);
+  const latestDelivery = delivery?.latest || null;
+  const reviewIds = (latestDelivery?.reviewFileIds?.length ? latestDelivery.reviewFileIds : latestDelivery?.finalFileIds || []).map(Number);
+  const isActiveReviewCut = reviewIds.includes(Number(file.id)) && latestDelivery?.status === "SUBMITTED";
+  const isApprovedReviewCut = reviewIds.includes(Number(file.id)) && latestDelivery?.status === "APPROVED";
+  const canSubmitReview =
+    isEditor &&
+    isVideo &&
+    !readOnly &&
+    !mediaBlocked &&
+    !mediaPending &&
+    file.category !== "final" &&
+    (!latestDelivery || latestDelivery.status === "CHANGES_REQUESTED");
   return (
     <li className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
       <div
         className={`relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 aspect-video flex items-center justify-center ${
           isVideo ? "cursor-pointer group" : ""
         }`}
-        onClick={isVideo ? onReview : undefined}
+        onClick={isVideo ? () => onReview(isActiveReviewCut) : undefined}
       >
-        {isVideo && file.url ? (
+        {isVideo && previewUrl && !mediaBlocked ? (
           <>
-            <video
-              src={file.url}
-              preload="metadata"
-              muted
-              className="w-full h-full object-cover bg-black"
-            />
+            {posterUrl ? (
+              <img src={posterUrl} alt="" className="w-full h-full object-cover bg-black" />
+            ) : (
+              <video
+                src={previewUrl}
+                preload="metadata"
+                muted
+                className="w-full h-full object-cover bg-black"
+              />
+            )}
             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <span className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-full inline-flex items-center gap-1">
                 <MessageSquare className="w-3.5 h-3.5" /> Review video
@@ -330,6 +483,23 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
             <MessageSquare className="w-3 h-3" /> {openCount > 0 ? `${openCount} open` : `${totalCount} resolved`}
           </span>
         )}
+        {isActiveReviewCut && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-30">
+            <span className="-rotate-12 rounded bg-black/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+              VIDLANCING REVIEW
+            </span>
+          </div>
+        )}
+        {isActiveReviewCut && (
+          <span className="absolute bottom-2 right-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-500 text-white inline-flex items-center gap-1">
+            <Lock className="w-3 h-3" /> Client approval
+          </span>
+        )}
+        {isVideo && mediaStatus && (
+          <span className={`absolute bottom-2 right-2 px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${MEDIA_TONE[mediaStatus] || MEDIA_TONE.PENDING}`}>
+            {mediaLabel(mediaStatus)}
+          </span>
+        )}
       </div>
 
       <div className="p-3 space-y-2">
@@ -339,6 +509,12 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
             {formatBytes(file.size)} · {file.category}
           </p>
         </div>
+
+        {mediaStatus === "PLACEHOLDER" && (
+          <p className="rounded-md border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-medium text-purple-800 dark:border-purple-700/40 dark:bg-purple-900/20 dark:text-purple-200">
+            {PLACEHOLDER_BANNER_COPY}
+          </p>
+        )}
 
         <div className="flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-400">
           {file.uploader && <Avatar user={file.uploader} size={20} />}
@@ -351,11 +527,11 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
           {isVideo && (
             <button
               type="button"
-              onClick={onReview}
+              onClick={() => onReview(isActiveReviewCut)}
               className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-500"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              Review
+              {isActiveReviewCut ? "Protected review" : "Review"}
             </button>
           )}
           {!isVideo && file.url && (
@@ -369,7 +545,7 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
               View
             </a>
           )}
-          {file.url && (
+          {file.url && !isActiveReviewCut && (
             <a
               href={file.url}
               download={file.fileName}
@@ -379,11 +555,34 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
               <Download className="w-3.5 h-3.5" />
             </a>
           )}
-          {isClient && file.status === "PENDING_REVIEW" && (
+          {canSubmitReview && (
+            <button
+              type="button"
+              onClick={onSendForApproval}
+              disabled={deliveryAction === `submit-${file.id}`}
+              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {deliveryAction === `submit-${file.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send approval
+            </button>
+          )}
+          {isEditor && isVideo && !readOnly && (mediaPending || mediaBlocked) && (
+            <span className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              {mediaPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
+              {mediaBlocked ? "Blocked" : "Processing"}
+            </span>
+          )}
+          {isApprovedReviewCut && (
+            <span className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+              Delivery unlocked
+            </span>
+          )}
+          {isClient && !readOnly && isActiveReviewCut && (
             <>
               <button
                 type="button"
-                onClick={onRequestChanges}
+                onClick={() => onDeliveryReview("request-changes")}
+                disabled={!!deliveryAction}
                 title="Request changes"
                 className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50"
               >
@@ -391,22 +590,34 @@ function FileCard({ file, role, onReview, onApprove, onRequestChanges, onArchive
               </button>
               <button
                 type="button"
-                onClick={onApprove}
+                onClick={() => onDeliveryReview("approve")}
+                disabled={!!deliveryAction}
                 title="Approve"
                 className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
               </button>
+              <button
+                type="button"
+                onClick={() => onDeliveryReview("dispute")}
+                disabled={!!deliveryAction}
+                title="Dispute"
+                className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            title="Delete"
-            className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete"
+              className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </li>

@@ -403,8 +403,8 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
   Record<string, string[]>
 > = {
   client: {
-    ACCEPTED: ["IN_PROGRESS", "PAUSED", "CANCELLED", "COMPLETED"],
-    IN_PROGRESS: ["PAUSED", "CANCELLED", "COMPLETED"],
+    ACCEPTED: ["IN_PROGRESS", "PAUSED", "CANCELLED"],
+    IN_PROGRESS: ["PAUSED", "CANCELLED"],
     PAUSED: ["IN_PROGRESS", "CANCELLED"],
   },
   freelancer: {

@@ -1,9 +1,12 @@
-import { emailQueue, notificationQueue, paymentQueue, fileCleanupQueue } from "./index.js";
+import { emailQueue, notificationQueue, paymentQueue, fileCleanupQueue, mediaQueue } from "./index.js";
 import nodemailer from "nodemailer";
 import { sql, sqlOne, withTransaction } from "../db.js";
 import { deleteFileFromS3 } from "../Utils/s3.js";
 import logger from "../Utils/logger.js";
 import type { PoolClient } from "pg";
+import { getMediaAssetById, queueMediaProcessing, updateMediaAsset } from "../Services/mediaAsset.service.js";
+import { scanMediaAsset } from "../Services/mediaScan.service.js";
+import { processMediaAsset } from "../Services/mediaProcessing.service.js";
 
 interface EmailJobData {
   to: string;
@@ -41,6 +44,10 @@ interface PaymentJobData {
 
 interface FileCleanupJobData {
   fileUrls: string[];
+}
+
+interface MediaJobData {
+  assetId: number;
 }
 
 const transporter = nodemailer.createTransport({
@@ -171,5 +178,89 @@ export function startProcessors(): void {
     }
   });
 
-  logger.info("Bull queue processors started: emails, notifications, payments, file-cleanup");
+  mediaQueue.process("scan_media", 2, async (job) => {
+    const { assetId } = job.data as MediaJobData;
+    const asset = await getMediaAssetById(Number(assetId));
+    if (!asset) return;
+    await updateMediaAsset(Number(asset.id), { status: "SCANNING", scanStatus: "SCANNING", error: null });
+    const result = await scanMediaAsset(asset);
+    if (result.status === "INFECTED") {
+      await updateMediaAsset(Number(asset.id), {
+        status: "QUARANTINED",
+        scanStatus: "INFECTED",
+        processingStatus: "BLOCKED",
+        metadata: { ...(asset.metadata as Record<string, unknown> | undefined), scan: result.details },
+        error: "Virus scan detected a threat",
+      });
+      return;
+    }
+    if (result.status === "FAILED") {
+      await updateMediaAsset(Number(asset.id), {
+        status: "FAILED",
+        scanStatus: "FAILED",
+        processingStatus: "BLOCKED",
+        metadata: { ...(asset.metadata as Record<string, unknown> | undefined), scan: result.details },
+        error: "Virus scan failed",
+      });
+      return;
+    }
+    await updateMediaAsset(Number(asset.id), {
+      status: "PROCESSING",
+      scanStatus: result.status,
+      processingStatus: "QUEUED",
+      metadata: { ...(asset.metadata as Record<string, unknown> | undefined), scan: result.details },
+    });
+    await queueMediaProcessing(Number(asset.id));
+  });
+
+  mediaQueue.process("process_media", 2, async (job) => {
+    const { assetId } = job.data as MediaJobData;
+    const asset = await getMediaAssetById(Number(assetId));
+    if (!asset) return;
+    await updateMediaAsset(Number(asset.id), { status: "PROCESSING", processingStatus: "PROCESSING", error: null });
+    try {
+      const processed = await processMediaAsset(asset);
+      const placeholder = Boolean((processed.metadata || {}).placeholder);
+      await updateMediaAsset(Number(asset.id), {
+        status: placeholder ? "PLACEHOLDER" : "READY",
+        processingStatus: placeholder ? "SKIPPED_DEV" : "READY",
+        posterKey: processed.posterKey || null,
+        previewKey: processed.previewKey || null,
+        watermarkedKey: processed.watermarkedKey || null,
+        variants: processed.variants,
+        metadata: { ...(asset.metadata as Record<string, unknown> | undefined), processing: processed.metadata },
+        error: null,
+      });
+    } catch (error) {
+      await updateMediaAsset(Number(asset.id), {
+        status: "FAILED",
+        processingStatus: "FAILED",
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  });
+
+  mediaQueue.process("cleanup_media", 2, async (job) => {
+    const { assetId } = job.data as MediaJobData;
+    const asset = await getMediaAssetById(Number(assetId));
+    if (!asset) return;
+    const keys = [
+      asset.posterKey,
+      asset.previewKey,
+      asset.watermarkedKey,
+      ...(Array.isArray(asset.variants) ? asset.variants.map((variant) => variant?.key) : []),
+    ]
+      .map((key) => String(key || ""))
+      .filter((key) => key && !key.startsWith("dev-placeholder"));
+    for (const key of [...new Set(keys)]) {
+      try {
+        await deleteFileFromS3(key);
+      } catch (error) {
+        logger.warn("Failed media cleanup for asset %s key %s: %s", assetId, key, (error as Error).message);
+      }
+    }
+  });
+
+  logger.info("Bull queue processors started: emails, notifications, payments, file-cleanup, media-pipeline");
 }

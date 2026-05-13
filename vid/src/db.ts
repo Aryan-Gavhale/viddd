@@ -6,6 +6,7 @@
  * process.env.DATABASE_URL before the Pool constructor reads it.
  */
 import pg from "pg";
+import fs from "fs";
 import logger from "./Utils/logger.js";
 import type { PoolClient } from "pg";
 import type { DbRow, TxQueryFn, TxOneFn } from "./types/index.js";
@@ -28,7 +29,44 @@ function getPool(): InstanceType<typeof Pool> {
     const IDLE_TX_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TX_TIMEOUT_MS || "60000", 10);
 
     const dbUrl = process.env.DATABASE_URL || "";
-    const needsSsl = /sslmode=require/.test(dbUrl) || dbUrl.includes(".neon.tech");
+    const needsSsl =
+      /sslmode=require/.test(dbUrl) ||
+      dbUrl.includes(".neon.tech") ||
+      process.env.DATABASE_SSL === "true";
+
+    // Strict TLS in production:
+    //   - default `rejectUnauthorized: true`
+    //   - optionally pin a CA via DATABASE_SSL_CA (PEM literal) or
+    //     DATABASE_SSL_CA_PATH (file containing the PEM)
+    //   - operators can opt out with DATABASE_SSL_REJECT_UNAUTHORIZED="false"
+    //     ONLY for genuinely self-signed staging environments.
+    let ssl: false | { rejectUnauthorized: boolean; ca?: string } = false;
+    if (needsSsl) {
+      const inProd = process.env.NODE_ENV === "production";
+      const rejectUnauthEnv = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED;
+      const rejectUnauthorized = inProd
+        ? rejectUnauthEnv !== "false"
+        : rejectUnauthEnv === "true";
+
+      let ca: string | undefined;
+      if (process.env.DATABASE_SSL_CA) {
+        ca = process.env.DATABASE_SSL_CA;
+      } else if (process.env.DATABASE_SSL_CA_PATH) {
+        try {
+          ca = fs.readFileSync(process.env.DATABASE_SSL_CA_PATH, "utf8");
+        } catch (e) {
+          throw new Error(`Failed to read DATABASE_SSL_CA_PATH: ${(e as Error).message}`);
+        }
+      }
+
+      if (inProd && !rejectUnauthorized && !ca) {
+        logger.warn(
+          "DATABASE_SSL_REJECT_UNAUTHORIZED=false in production — Postgres TLS is not verified. Pin a CA via DATABASE_SSL_CA or DATABASE_SSL_CA_PATH for a hardened deployment."
+        );
+      }
+
+      ssl = ca ? { rejectUnauthorized, ca } : { rejectUnauthorized };
+    }
 
     pool = new Pool({
       connectionString: dbUrl,
@@ -37,7 +75,7 @@ function getPool(): InstanceType<typeof Pool> {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
       application_name: "vidlancing-api",
-      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+      ...(ssl ? { ssl } : {}),
     });
 
     pool.on("error", (err) => {

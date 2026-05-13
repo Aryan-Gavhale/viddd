@@ -14,6 +14,7 @@ import { ApiResponse } from "../Utils/ApiResponse.js";
 import { ApiError } from "../Utils/ApiError.js";
 import { sql, sqlOne } from "../db.js";
 import type { AuthUser, DbRow, ExpressRequest, ExpressResponse, NextFunction } from "../types/index.js";
+import { createOrUpdateMediaAsset } from "../Services/mediaAsset.service.js";
 import Joi from "joi";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024 * 1024;
@@ -129,10 +130,14 @@ async function assertOrderOrJobForUpload(
 ): Promise<void> {
   if (role === "ADMIN") return;
   if (orderId != null) {
+    // "Order"."freelancer_id" stores the FreelancerProfile.id, NOT the
+    // owning user's id. We therefore JOIN through FreelancerProfile and
+    // compare its `user_id` so freelancers actually pass authorization.
     const row = await sqlOne(
-      `SELECT "id" FROM "Order" o
+      `SELECT o."id" FROM "Order" o
+       LEFT JOIN "FreelancerProfile" fp ON fp."id" = o."freelancer_id"
        WHERE o."id" = $1 AND o."deletedAt" IS NULL
-         AND (o."client_id" = $2 OR o."freelancer_id" = $2)`,
+         AND (o."client_id" = $2 OR fp."user_id" = $2)`,
       [orderId, userId]
     );
     if (!row) {
@@ -268,6 +273,20 @@ const completeUpload: Ctx = async (req, res, next) => {
       `UPDATE "FileUpload" SET "status" = 'COMPLETED', "finalUrl" = $1, "completedParts" = $2, "updatedAt" = NOW() WHERE "id" = $3`,
       [location, parts.length, record["id"]]
     );
+
+    await createOrUpdateMediaAsset({
+      sourceType: "FILE_UPLOAD",
+      fileUploadId: Number(record["id"]),
+      ownerId: userId,
+      scopeType: record["orderId"] != null ? "ORDER" : record["jobId"] != null ? "JOB" : null,
+      orderId: record["orderId"] != null ? Number(record["orderId"]) : null,
+      jobId: record["jobId"] != null ? Number(record["jobId"]) : null,
+      originalKey: key,
+      originalUrl: location,
+      mimeType: String(record["contentType"] || "video/mp4"),
+      fileSize: Number(record["fileSize"] || 0),
+      metadata: { uploadId },
+    });
 
     return res.json(new ApiResponse(200, { url: location }, "Upload completed"));
   } catch (e) {

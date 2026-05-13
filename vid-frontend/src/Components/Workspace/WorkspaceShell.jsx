@@ -8,7 +8,9 @@ import {
   MessageSquare,
   X,
   Folder,
+  PackageCheck,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios.js";
 import { ProjectSidebar } from "./ProjectSidebar.jsx";
 import { ProjectHeader } from "./ProjectHeader.jsx";
@@ -17,11 +19,13 @@ import { FilesTab } from "./FilesTab.jsx";
 import { MilestonesTab } from "./MilestonesTab.jsx";
 import { ActivityTab } from "./ActivityTab.jsx";
 import { ChatRail } from "./ChatRail.jsx";
+import { DeliveryPanel } from "./DeliveryPanel.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "files", label: "Files", icon: FolderOpen },
   { id: "milestones", label: "Milestones", icon: CheckSquare },
+  { id: "delivery", label: "Delivery", icon: PackageCheck },
   { id: "activity", label: "Activity", icon: Activity },
 ];
 
@@ -41,9 +45,13 @@ export default function WorkspaceShell() {
   const [chatOpenMobile, setChatOpenMobile] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
 
+  const [projectsError, setProjectsError] = useState("");
+  const [summaryError, setSummaryError] = useState("");
+
   // Fetch project list
   const refreshProjects = useCallback(async () => {
     setProjectsLoading(true);
+    setProjectsError("");
     try {
       const res = await axiosInstance.get("/workspace/projects");
       const list = res.data?.data?.projects || [];
@@ -53,6 +61,9 @@ export default function WorkspaceShell() {
       }
     } catch (e) {
       console.error("Failed to load projects", e);
+      const msg = e?.response?.data?.message || "Could not load your projects. Check your connection and try again.";
+      setProjectsError(msg);
+      toast.error(msg);
     } finally {
       setProjectsLoading(false);
     }
@@ -67,15 +78,20 @@ export default function WorkspaceShell() {
   const refreshSummary = useCallback(async () => {
     if (!selectedJobId) {
       setSummary(null);
+      setSummaryError("");
       return;
     }
     setSummaryLoading(true);
+    setSummaryError("");
     try {
       const res = await axiosInstance.get(`/workspace/projects/${selectedJobId}`);
       setSummary(res.data?.data || null);
     } catch (e) {
       console.error("Failed to load summary", e);
       setSummary(null);
+      const msg = e?.response?.data?.message || "Could not load this project's workspace. Try reselecting it or refresh the page.";
+      setSummaryError(msg);
+      toast.error(msg);
     } finally {
       setSummaryLoading(false);
     }
@@ -85,9 +101,11 @@ export default function WorkspaceShell() {
     refreshSummary();
     // mark messages as read for this project
     if (selectedJobId) {
-      axiosInstance
-        .post(`/workspace/projects/${selectedJobId}/read`)
-        .catch(() => {});
+      axiosInstance.post(`/workspace/projects/${selectedJobId}/read`).catch((e) => {
+        // Don't toast on every read-failure (very chatty), but keep a visible
+        // log so the developer console isn't silent the way it used to be.
+        console.warn("Mark-as-read failed:", e?.response?.data?.message || e?.message);
+      });
     }
   }, [selectedJobId, refreshSummary]);
 
@@ -116,7 +134,7 @@ export default function WorkspaceShell() {
       return;
     }
     if (action === "request_review") {
-      setActiveTab("files");
+      setActiveTab("delivery");
       return;
     }
     if (action === "submit_invoice") {
@@ -145,8 +163,7 @@ export default function WorkspaceShell() {
       await Promise.all([refreshProjects(), refreshSummary()]);
     } catch (e) {
       console.error("action failed", e);
-      // eslint-disable-next-line no-alert
-      alert(e?.response?.data?.message || "Action failed. Please try again.");
+      toast.error(e?.response?.data?.message || "Action failed. Please try again.");
     } finally {
       setSavingAction(false);
     }
@@ -165,7 +182,7 @@ export default function WorkspaceShell() {
 
       <main className="flex-1 flex min-w-0">
         {!selectedJobId ? (
-          <EmptyWorkspace />
+          <EmptyWorkspace error={projectsError} onRetry={refreshProjects} />
         ) : (
           <>
             <section className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50 dark:bg-gray-950">
@@ -177,14 +194,38 @@ export default function WorkspaceShell() {
               />
               <Tabs activeTab={activeTab} onChange={setActiveTab} />
               <div className="flex-1 overflow-y-auto">
-                {summaryLoading && !summary ? (
+                {summaryError && !summaryLoading && !summary ? (
+                  <div className="m-6 rounded-2xl border border-rose-200 bg-rose-50 p-6 dark:border-rose-700/40 dark:bg-rose-900/20">
+                    <p className="text-sm font-semibold text-rose-700 dark:text-rose-200">{summaryError}</p>
+                    <button
+                      type="button"
+                      onClick={refreshSummary}
+                      className="mt-3 inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : summaryLoading && !summary ? (
                   <SummarySkeleton />
                 ) : activeTab === "overview" ? (
                   <OverviewTab summary={summary} role={role} />
                 ) : activeTab === "files" ? (
-                  <FilesTab jobId={selectedJobId} role={role} onChanged={refreshSummary} />
+                  <FilesTab
+                    jobId={selectedJobId}
+                    role={role}
+                    readOnly={summary?.job?.status === "COMPLETED"}
+                    onChanged={refreshSummary}
+                  />
                 ) : activeTab === "milestones" ? (
                   <MilestonesTab jobId={selectedJobId} role={role} onChanged={refreshSummary} />
+                ) : activeTab === "delivery" ? (
+                  <DeliveryPanel
+                    scopeType="JOB"
+                    scopeId={selectedJobId}
+                    role={role}
+                    availableFiles={summary?.files || []}
+                    onChanged={() => Promise.all([refreshProjects(), refreshSummary()])}
+                  />
                 ) : activeTab === "activity" ? (
                   <ActivityTab summary={summary} />
                 ) : null}
@@ -261,7 +302,29 @@ function Tabs({ activeTab, onChange }) {
   );
 }
 
-function EmptyWorkspace() {
+function EmptyWorkspace({ error, onRetry }) {
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <div className="text-center max-w-md p-6">
+          <div className="w-16 h-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center mb-4">
+            <Folder className="w-8 h-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Could not load your projects</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{error}</p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-4 inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-950">
       <div className="text-center max-w-md p-6">

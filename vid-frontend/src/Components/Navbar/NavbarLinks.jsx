@@ -14,14 +14,7 @@ import {
 import { SearchBar } from "./search-bar"
 import { LikedSection } from "./liked-sections"
 
-// Sample liked items for demonstration
-const sampleLikedItems = [
-  { id: "1", title: "Professional Video Editor", type: "Freelancer", image: "/placeholder.svg?height=40&width=40" },
-  { id: "2", title: "Motion Graphics Project", type: "Job", image: "/placeholder.svg?height=40&width=40" },
-  { id: "3", title: "Video Production Services", type: "Service" },
-]
-
-const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
+const NavbarLinks = ({ activeSection, handleLinkClick, role, user }) => {
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false)
 
@@ -284,7 +277,7 @@ const NavbarLinks = ({ activeSection, handleLinkClick, role }) => {
         <SearchBar role={role} onSearch={handleSearch} />
 
         {/* Liked Section with Heart Icon */}
-        <LikedSection initialItems={sampleLikedItems} />
+        <LikedSection user={user} />
       </div>
     </div>
   )

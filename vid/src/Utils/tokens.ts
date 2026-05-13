@@ -73,6 +73,18 @@ function refreshFamilyKey(userId: number): string {
   return `auth:refresh:${userId}`;
 }
 
+const isProductionEnv = (): boolean => process.env.NODE_ENV === "production";
+
+class RefreshTokenStoreUnavailable extends Error {
+  constructor(operation: string, cause: unknown) {
+    super(`Refresh token store unavailable during ${operation}: ${(cause as Error)?.message || cause}`);
+    this.name = "RefreshTokenStoreUnavailable";
+  }
+}
+
+export const isRefreshStoreUnavailable = (e: unknown): e is RefreshTokenStoreUnavailable =>
+  e instanceof RefreshTokenStoreUnavailable;
+
 export interface AccessTokenPayload extends JwtPayload {
   type: "access";
 }
@@ -109,8 +121,16 @@ export async function generateRefreshToken(user: AuthUser | DbRow): Promise<{
       "EX",
       REFRESH_TTL_SECONDS
     );
-  } catch {
-    logger.warn("Redis unavailable — refresh token family not tracked for user %s", user.id);
+  } catch (cause) {
+    // Fail closed in production: without Redis we have no way to revoke or
+    // detect refresh-token reuse, which makes any leaked refresh token valid
+    // for the full TTL. Drop the connection rather than mint an untracked
+    // token. Dev/test still gets a degraded warning so local work isn't
+    // blocked by a missing local Redis.
+    if (isProductionEnv()) {
+      throw new RefreshTokenStoreUnavailable("issue", cause);
+    }
+    logger.warn("Redis unavailable — refresh token family not tracked for user %s (dev only)", user.id);
   }
 
   return { token, jti, ttlSeconds: REFRESH_TTL_SECONDS };
@@ -141,13 +161,25 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Refres
 
   const userId = Number(decoded.id);
   let expectedJti: string | null = null;
+  let storeReachable = true;
   try {
     expectedJti = await redisClient.get(refreshFamilyKey(userId));
-  } catch {
-    logger.warn("Redis unavailable during refresh — skipping jti check for user %s", userId);
+  } catch (cause) {
+    storeReachable = false;
+    if (isProductionEnv()) {
+      // Without the family record we can't reliably detect refresh-token
+      // reuse. Refuse to rotate so a stolen token can't be silently exchanged
+      // for a fresh access/refresh pair while Redis is down.
+      throw new RefreshTokenStoreUnavailable("rotation", cause);
+    }
+    logger.warn("Redis unavailable during refresh — skipping jti check for user %s (dev only)", userId);
   }
 
-  if (expectedJti !== null) {
+  if (storeReachable) {
+    if (expectedJti === null) {
+      // Family was revoked (logout / forced re-auth) or never recorded.
+      throw new Error("Refresh session no longer valid; please sign in again");
+    }
     if (expectedJti !== decoded.jti) {
       try { await redisClient.del(refreshFamilyKey(userId)); } catch { /* noop */ }
       throw new Error("Refresh token reuse detected; session revoked");

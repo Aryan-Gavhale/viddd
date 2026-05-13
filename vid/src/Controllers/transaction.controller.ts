@@ -104,7 +104,11 @@ const createTransaction: Handler = async (req, res, next) => {
         metadata: { orderId: String(order.id), userId: String(userId) },
       });
 
-      const status = paymentIntent.status === "succeeded" ? "COMPLETED" : "PENDING";
+      const status = process.env.NODE_ENV === "production"
+        ? "PENDING"
+        : paymentIntent.status === "succeeded"
+          ? "COMPLETED"
+          : "PENDING";
       const txRow = await client.query(
         `INSERT INTO "Transaction" (
           "order_id", "user_id", "amount", "type", "paymentMethod", "status", "paymentIntentId"
@@ -143,6 +147,11 @@ const processPayment: Handler = async (req, res, next) => {
 
     const paymentIntent = await stripe.paymentIntents.confirm(String(transaction.paymentIntentId));
     if (paymentIntent.status === "succeeded") {
+      if (process.env.NODE_ENV === "production") {
+        return res
+          .status(202)
+          .json(new ApiResponse(202, transaction, "Payment confirmed by provider. Waiting for webhook to update escrow."));
+      }
       const updatedTransaction = mapTransactionRow(
         (await sqlOne(
           `UPDATE "Transaction" SET "status" = 'COMPLETED'::"TransactionStatus"

@@ -9,8 +9,26 @@ import { EVENTS, ROOMS } from "../../shared/socketEvents.js";
 import type { Server as HttpServer } from "http";
 import type { JwtPayload, DbRow } from "./types/index.js";
 
+// In-memory fallback for socket rate limiting. Used only when no shared Redis
+// is available (single-process dev). Production must hit `socketRateRedis`
+// below so a user can't bypass limits by reconnecting through a different
+// socket.io node.
 const socketRateLimit = new Map<number, { count: number; resetAt: number }>();
-function checkSocketRate(userId: number, maxPerWindow = 30, windowMs = 10000): boolean {
+let socketRateRedis: InstanceType<typeof Redis> | null = null;
+
+async function checkSocketRate(userId: number, maxPerWindow = 30, windowMs = 10000): Promise<boolean> {
+  if (socketRateRedis) {
+    try {
+      const key = `socket:rl:${userId}`;
+      const count = await socketRateRedis.incr(key);
+      if (count === 1) {
+        await socketRateRedis.pexpire(key, windowMs);
+      }
+      return count <= maxPerWindow;
+    } catch (e) {
+      logger.warn("Socket Redis rate limit unavailable, falling back to memory: %s", (e as Error).message);
+    }
+  }
   const now = Date.now();
   const entry = socketRateLimit.get(userId);
   if (!entry || now > entry.resetAt) {
@@ -20,6 +38,34 @@ function checkSocketRate(userId: number, maxPerWindow = 30, windowMs = 10000): b
   entry.count++;
   if (entry.count > maxPerWindow) return false;
   return true;
+}
+
+// Cache the small bit of user state we need on every reconnect (id, name,
+// avatar, isActive). 60s TTL is short enough that a flagged/deactivated
+// account can't keep socket access for long but eliminates the per-connect
+// SELECT against User on every page load.
+const SOCKET_USER_CACHE_TTL_MS = 60_000;
+type CachedUser = { user: SocketUser; cachedAt: number };
+const socketUserCache = new Map<number, CachedUser>();
+
+async function loadSocketUser(userId: number): Promise<SocketUser | null> {
+  const cached = socketUserCache.get(userId);
+  if (cached && Date.now() - cached.cachedAt < SOCKET_USER_CACHE_TTL_MS) {
+    return cached.user;
+  }
+  const row = (await sqlOne(
+    `SELECT "id", "firstname", "lastname", "email", "role", "profilePicture", "isActive"
+     FROM "User" WHERE "id" = $1`,
+    [userId]
+  )) as SocketUser | null;
+  if (row) {
+    socketUserCache.set(userId, { user: row, cachedAt: Date.now() });
+  }
+  return row;
+}
+
+export function invalidateSocketUserCache(userId: number): void {
+  socketUserCache.delete(userId);
 }
 
 interface SocketUser {
@@ -88,6 +134,9 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
 
     io.adapter(createAdapter(pubClient, subClient));
     socketIoRedisAdapterOk = true;
+    // Reuse the pub client for rate-limit increments. Operations are tiny
+    // INCR/PEXPIRE calls so we don't need a separate connection.
+    socketRateRedis = pubClient;
     logger.info("Socket.IO Redis adapter connected (ioredis)");
   } catch (err) {
     logger.warn("Socket.IO Redis adapter unavailable — using in-memory adapter: %s", (err as Error).message);
@@ -111,13 +160,10 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
       if (tokenType !== "access") {
         return next(new Error("Invalid token type"));
       }
-      const user = await sqlOne(
-        `SELECT "id", "firstname", "lastname", "email", "role", "profilePicture", "isActive"
-         FROM "User" WHERE "id" = $1`,
-        [decoded.id]
-      ) as SocketUser | null;
+      const user = await loadSocketUser(Number(decoded.id));
 
       if (!user || user.isActive === false) {
+        invalidateSocketUserCache(Number(decoded.id));
         return next(new Error("Account is deactivated"));
       }
 
@@ -137,7 +183,7 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     socket.join(ROOMS.user(socket.user.id));
 
     socket.on(EVENTS.JOIN_JOB_ROOM, async ({ jobId }: { jobId: string | number }) => {
-      if (!checkSocketRate(socket.user.id)) {
+      if (!(await checkSocketRate(socket.user.id))) {
         socket.emit(EVENTS.ERROR, { message: "Rate limit exceeded" });
         return;
       }
@@ -176,7 +222,7 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
       replyToId?: string;
       clientId?: string;
     }) => {
-      if (!checkSocketRate(socket.user.id)) {
+      if (!(await checkSocketRate(socket.user.id))) {
         socket.emit(EVENTS.MESSAGE_FAILED, { clientId, message: "Rate limit exceeded" });
         return;
       }
@@ -353,7 +399,7 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     socket.on(EVENTS.ADD_REACTION, async ({ jobId, messageId, emoji }: {
       jobId: string | number; messageId: string; emoji: string;
     }) => {
-      if (!checkSocketRate(socket.user.id)) {
+      if (!(await checkSocketRate(socket.user.id))) {
         socket.emit(EVENTS.ERROR, { message: "Rate limit exceeded" });
         return;
       }

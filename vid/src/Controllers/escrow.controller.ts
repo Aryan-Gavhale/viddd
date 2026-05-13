@@ -4,6 +4,7 @@ import { ApiResponse } from "../Utils/ApiResponse.js";
 import logger from "../Utils/logger.js";
 import { queueNotification } from "../Queues/processors.js";
 import type { ExpressRequest, ExpressResponse, NextFunction, DbRow } from "../types/index.js";
+import { createEscrowReleaseTransfer } from "../Services/payment.service.js";
 
 type Handler = (
   req: ExpressRequest,
@@ -48,12 +49,18 @@ export const releaseEscrow: Handler = async (req, res, next) => {
     }
 
     const totalPrice = Number(order.totalPrice);
+    const payoutAmount = Number(order.freelancerPayout ?? order.totalPrice);
+    const transfer = await createEscrowReleaseTransfer(order);
     const updated = (await withTransaction(async (client) => {
       const upd = await client.query(
         `UPDATE "Order"
-       SET "escrowStatus" = 'RELEASED', "status" = 'COMPLETED', "completedAt" = $1, "updatedAt" = $1
+       SET "escrowStatus" = 'RELEASED',
+           "status" = 'COMPLETED',
+           "completedAt" = $1,
+           "updatedAt" = $1,
+           "metadata" = COALESCE("metadata", '{}'::jsonb) || $3::jsonb
        WHERE "id" = $2 AND "escrowStatus" = 'HELD' AND "deletedAt" IS NULL`,
-        [new Date(), parsedOrderId]
+        [new Date(), parsedOrderId, JSON.stringify({ escrowRelease: transfer, releasedAt: new Date().toISOString() })]
       );
 
       if (upd.rowCount === 0) {
@@ -71,7 +78,7 @@ export const releaseEscrow: Handler = async (req, res, next) => {
         `UPDATE "FreelancerProfile"
        SET "totalEarnings" = "totalEarnings" + $1, "updatedAt" = $2
        WHERE "id" = $3`,
-        [totalPrice, new Date(), order.freelancerId]
+        [payoutAmount, new Date(), order.freelancerId]
       );
 
       const tOne = txOne(client);
@@ -87,7 +94,7 @@ export const releaseEscrow: Handler = async (req, res, next) => {
     queueNotification({
       userId: freelancerUserId,
       type: "PAYMENT",
-      content: `Escrow of $${totalPrice} has been released for order #${String(order.orderNumber)}`,
+      content: `Escrow payout of $${payoutAmount} has been released for order #${String(order.orderNumber)}`,
       entityType: "Order",
       entityId: order.id as number,
     }).catch((err) => logger.warn("Failed to queue escrow release notification: %s", (err as Error).message));

@@ -5,6 +5,7 @@ import { sql, sqlOne, sqlCount, withTransaction, txSql, txOne } from "../db.js";
 import logger from "../Utils/logger.js";
 import type { ExpressRequest, ExpressResponse, NextFunction } from "../types/index.js";
 import type { DbRow } from "../types/index.js";
+import { createEscrowReleaseTransfer, refundEscrowPayment } from "../Services/payment.service.js";
 
 type ControllerHandler = (
   req: ExpressRequest,
@@ -179,6 +180,22 @@ const updateDisputeStatus: ControllerHandler = async (req, res, next) => {
     const newResolvedAt = isFinal ? new Date() : dispute.resolvedAt ?? dispute.resolved_at;
     const newResolvedBy = isFinal ? userId : dispute.resolved_by ?? dispute.resolvedBy;
 
+    let providerAction: Record<string, unknown> | null = null;
+    if (st === "RESOLVED" || st === "CLOSED") {
+      const orderForProvider = (await sqlOne(
+        `SELECT o.*, o."freelancer_id" AS "freelancerId", o."freelancer_id" AS "freelancerProfileId"
+           FROM "Order" o
+          WHERE o."id" = $1 AND o."deletedAt" IS NULL`,
+        [dispute.order_id]
+      )) as DbRow | null;
+      if (orderForProvider && String(orderForProvider.escrowStatus) === "HELD") {
+        const resText = String(newResolution || "").toLowerCase();
+        providerAction = resText.includes("refund") || resText.includes("client")
+          ? await refundEscrowPayment(Number(dispute.order_id), "requested_by_customer")
+          : await createEscrowReleaseTransfer(orderForProvider);
+      }
+    }
+
     const updatedDispute = await withTransaction(async (client) => {
       const t = txSql(client);
       const one = txOne(client);
@@ -225,8 +242,13 @@ const updateDisputeStatus: ControllerHandler = async (req, res, next) => {
         if (escrow === "HELD") {
           if (favorClient) {
             await t(
-              `UPDATE "Order" SET status = 'REJECTED'::"OrderStatus", "escrowStatus" = 'REFUNDED', "updatedAt" = NOW() WHERE id = $1`,
-              [dispute.order_id]
+              `UPDATE "Order"
+                  SET status = 'REJECTED'::"OrderStatus",
+                      "escrowStatus" = 'REFUNDED',
+                      "metadata" = COALESCE("metadata", '{}'::jsonb) || $2::jsonb,
+                      "updatedAt" = NOW()
+                WHERE id = $1`,
+              [dispute.order_id, JSON.stringify({ disputeProviderAction: providerAction })]
             );
             await t(
               `INSERT INTO "OrderStatusHistory" (order_id, status, changed_by)
@@ -235,8 +257,13 @@ const updateDisputeStatus: ControllerHandler = async (req, res, next) => {
             );
           } else {
             await t(
-              `UPDATE "Order" SET status = 'COMPLETED'::"OrderStatus", "escrowStatus" = 'RELEASED', "updatedAt" = NOW() WHERE id = $1`,
-              [dispute.order_id]
+              `UPDATE "Order"
+                  SET status = 'COMPLETED'::"OrderStatus",
+                      "escrowStatus" = 'RELEASED',
+                      "metadata" = COALESCE("metadata", '{}'::jsonb) || $2::jsonb,
+                      "updatedAt" = NOW()
+                WHERE id = $1`,
+              [dispute.order_id, JSON.stringify({ disputeProviderAction: providerAction })]
             );
             await t(
               `INSERT INTO "OrderStatusHistory" (order_id, status, changed_by)

@@ -3,6 +3,8 @@ import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import { getPresignedPutUrl, getPresignedUrl } from "../Utils/s3.js";
 import type { AuthUser, ExpressRequest, ExpressResponse, NextFunction } from "../types/index.js";
+import { createOrUpdateMediaAsset, listMediaAssetsForProjectFiles } from "../Services/mediaAsset.service.js";
+import { areDevPlaceholdersAllowed } from "../Services/payment.service.js";
 
 const FOLDER_MIME = "application/x-directory";
 const FOLDER_KEY = "__vidlancing_folder__";
@@ -51,8 +53,13 @@ async function assertOrderAccess(user: AuthUser, orderId: number): Promise<void>
 
 function keyBelongsToUserOrder(key: string, orderId: number, userId: number, role: string): boolean {
   if (role === "ADMIN") return true;
+  if (isDevPlaceholderKey(key, orderId)) return true;
   const expected = new RegExp(`^project-files/${orderId}/${userId}/`);
   return expected.test(key);
+}
+
+function isDevPlaceholderKey(key: string, orderId: number): boolean {
+  return areDevPlaceholdersAllowed() && key.startsWith(`dev-placeholder/order/${orderId}/`);
 }
 
 /** After client upload: register DB entry with versioning */
@@ -101,8 +108,9 @@ export const uploadFile: H = async (req, res, next) => {
 
     const row = await sqlOne(
       `INSERT INTO "ProjectFile" (
-        "orderId", "uploadedBy", "fileName", "fileKey", "fileSize", "mimeType", "folder", "version", "isLatest", "tags", "createdAt"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9::jsonb, NOW())
+        "orderId", "uploadedBy", "uploaderId", "fileName", "fileKey", "url", "fileSize", "size", "mimeType",
+        "category", "folder", "version", "status", "note", "isLatest", "tags", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $2, $3, $4, $4, $5, $5, $6, $10, $7, $8, 'PENDING_REVIEW', '', true, $9::jsonb, NOW(), NOW())
       RETURNING *`,
       [
         b.orderId,
@@ -114,12 +122,28 @@ export const uploadFile: H = async (req, res, next) => {
         folder,
         nextVersion,
         JSON.stringify(tags),
+        folder === "/final-master" ? "final" : "deliverable",
       ]
     );
 
+    const media = b.mimeType?.startsWith("video/")
+      ? await createOrUpdateMediaAsset({
+          sourceType: "PROJECT_FILE",
+          projectFileId: Number(row?.id),
+          ownerId: req.user.id,
+          scopeType: "ORDER",
+          orderId: b.orderId,
+          originalKey: b.fileKey,
+          originalUrl: b.fileKey,
+          mimeType: b.mimeType || "application/octet-stream",
+          fileSize: Number(b.fileSize) || 0,
+          metadata: { folder, category: folder === "/final-master" ? "final" : "deliverable" },
+        })
+      : null;
+
     return res
       .status(201)
-      .json(new ApiResponse(201, { file: mapFileRow(row as Record<string, unknown>) }, "File recorded"));
+      .json(new ApiResponse(201, { file: { ...mapFileRow(row as Record<string, unknown>), media } }, "File recorded"));
   } catch (e) {
     return next(e instanceof ApiError ? e : new ApiError(500, (e as Error).message));
   }
@@ -151,7 +175,12 @@ export const getFiles: H = async (req, res, next) => {
       [orderId, folder, search, FOLDER_MIME]
     );
 
-    const files = (rows as Record<string, unknown>[]).map((r) => mapFileRowWithUser(r));
+    const mediaRows = await listMediaAssetsForProjectFiles((rows as Record<string, unknown>[]).map((r) => Number(r.id)));
+    const mediaByFile = new Map(mediaRows.map((m) => [Number(m.projectFileId), m]));
+    const files = (rows as Record<string, unknown>[]).map((r) => ({
+      ...mapFileRowWithUser(r),
+      media: mediaByFile.get(Number(r.id)) || null,
+    }));
     return res.json(new ApiResponse(200, { files, folder }, "OK"));
   } catch (e) {
     return next(e instanceof ApiError ? e : new ApiError(500, (e as Error).message));
@@ -172,8 +201,9 @@ export const createFolder: H = async (req, res, next) => {
 
     const row = await sqlOne(
       `INSERT INTO "ProjectFile" (
-        "orderId", "uploadedBy", "fileName", "fileKey", "fileSize", "mimeType", "folder", "version", "isLatest", "tags", "createdAt"
-      ) VALUES ($1, $2, $3, $4, 0, $5, $6, 1, true, '[]'::jsonb, NOW())
+        "orderId", "uploadedBy", "uploaderId", "fileName", "fileKey", "url", "fileSize", "size", "mimeType",
+        "category", "folder", "version", "status", "note", "isLatest", "tags", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $2, $3, $4, $4, 0, 0, $5, 'asset', $6, 1, 'APPROVED', '', true, '[]'::jsonb, NOW(), NOW())
       RETURNING *`,
       [b.orderId, req.user.id, name, FOLDER_KEY, FOLDER_MIME, parent]
     );
@@ -268,6 +298,18 @@ export const getDownloadUrl: H = async (req, res, next) => {
     await assertOrderAccess(req.user, orderId);
 
     const key = String(row.fileKey);
+    if (isDevPlaceholderKey(key, orderId)) {
+      const placeholder = `data:text/plain;charset=utf-8,${encodeURIComponent(
+        `Development placeholder for ${String(row.fileName || "video file")}. No video bytes were uploaded.`
+      )}`;
+      return res.json(
+        new ApiResponse(
+          200,
+          { url: placeholder, fileName: row.fileName, mimeType: "text/plain" },
+          "Development placeholder URL created"
+        )
+      );
+    }
     const url = await getPresignedUrl(key, 3600);
     return res.json(
       new ApiResponse(

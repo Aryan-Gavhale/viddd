@@ -1,423 +1,280 @@
-import { useState, useEffect } from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import axiosInstance from "../../utils/axios";
 import {
-  CreditCardIcon,
-  DevicePhoneMobileIcon,
-  BuildingLibraryIcon,
-  WalletIcon,
-  ShieldCheckIcon,
-  ClockIcon,
-  TagIcon,
+  ArrowTopRightOnSquareIcon,
   CheckCircleIcon,
-} from "@heroicons/react/24/outline"
-
+  ClockIcon,
+  CreditCardIcon,
+  ShieldCheckIcon,
+  TagIcon,
+} from "@heroicons/react/24/outline";
 
 export default function PaymentPage() {
   const navigate = useNavigate();
   const { gigId, pkgName } = useParams();
-
   const location = useLocation();
-  const gig = location.state?.gig;
-  const pkg = location.state?.pkg;
-  const orderId = location.state?.orderId;
-  const orderNumber = location.state?.orderNumber;
-  const totalPrice = location.state?.totalPrice;
-  const addSubtitles = location.state?.addSubtitles ?? false;
-  const expressDelivery = location.state?.expressDelivery ?? false;
-  
-  console.log("Gig ID:", gigId);
-  console.log("Package Name:", pkgName);
+  const [searchParams] = useSearchParams();
+  const orderId = location.state?.orderId || searchParams.get("orderId");
 
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("card")
-  const [promoCode, setPromoCode] = useState("")
-  const [promoApplied, setPromoApplied] = useState(false)
-  const [formData, setFormData] = useState({
-    cardNumber: "",
-    expiryDate: "",
-    cvv: "",
-    cardholderName: "",
-    upiId: "",
-    bankName: "",
-    walletProvider: "",
-  })
+  const [gig, setGig] = useState(location.state?.gig || null);
+  const [pkg, setPkg] = useState(location.state?.pkg || null);
+  const [order, setOrder] = useState(location.state?.order || null);
+  const [orderNumber, setOrderNumber] = useState(location.state?.orderNumber || "");
+  const [totalPrice, setTotalPrice] = useState(location.state?.totalPrice || null);
+  const [pricing, setPricing] = useState(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState(Boolean(orderId && (!gig || !pkg)));
+  const [checkoutError, setCheckoutError] = useState("");
+  const [isPaying, setIsPaying] = useState(false);
+  const [checkoutMode, setCheckoutMode] = useState(null);
 
-  if (!gig || !pkg) {
-    // fallback to fetch if someone visits directly
-    return <div>Loading package...</div>;
-  }
+  // Surfaces the local-only fake checkout banner the moment the page knows it
+  // will never hit Stripe. Reads two signals:
+  //   1. VITE_ALLOW_LOCAL_FAKE_CHECKOUT — operator-set build flag.
+  //   2. checkoutMode === "local_dev" — confirmed by the API after we ask it
+  //      to start a session.
+  const localFakeOptIn = String(import.meta.env.VITE_ALLOW_LOCAL_FAKE_CHECKOUT || "").toLowerCase() === "true";
+  const isLocalFakeCheckout = checkoutMode === "local_dev" || localFakeOptIn;
 
-  const orderDetails = {
-    planName: pkg.name,
-    basePrice: Number(pkg.price),
-    addOns: {
-      subtitles: { selected: addSubtitles, price: 200 },
-      expressDelivery: { selected: expressDelivery, price: 500 },
-    },
-    taxes: 0,
-    discount: promoApplied ? 100 : 0,
-    estimatedDelivery: "3 Days",
-  }
+  useEffect(() => {
+    if (!orderId || (gig && pkg)) return undefined;
+    let alive = true;
+    const fetchOrder = async () => {
+      try {
+        setCheckoutLoading(true);
+        setCheckoutError("");
+        const response = await axiosInstance.get(`/orders/${orderId}`);
+        if (!alive) return;
+        const loadedOrder = response.data?.data;
+        if (!loadedOrder) throw new Error("Order not found");
+        setOrder(loadedOrder);
+        setGig(loadedOrder.gig || null);
+        setPkg({
+          name: loadedOrder.package || decodeURIComponent(pkgName || ""),
+          price: Number(loadedOrder.totalPrice || 0),
+          description: loadedOrder.gig?.description || "",
+          deliveryTime: loadedOrder.gig?.deliveryTime,
+        });
+        setOrderNumber(loadedOrder.orderNumber || "");
+        setTotalPrice(Number(loadedOrder.totalPrice || 0));
+      } catch (error) {
+        if (alive) setCheckoutError(error.response?.data?.message || error.message || "Failed to load checkout order.");
+      } finally {
+        if (alive) setCheckoutLoading(false);
+      }
+    };
+    fetchOrder();
+    return () => {
+      alive = false;
+    };
+  }, [gig, orderId, pkg, pkgName]);
 
-  const totalAmount =
-    orderDetails.basePrice +
-    (orderDetails.addOns.subtitles.selected ? orderDetails.addOns.subtitles.price : 0) +
-    (orderDetails.addOns.expressDelivery.selected ? orderDetails.addOns.expressDelivery.price : 0) +
-    orderDetails.taxes -
-    orderDetails.discount
-
-  const paymentMethods = [
-    {
-      id: "card" ,
-      name: "Credit/Debit Card",
-      icon: CreditCardIcon,
-      description: "Visa, Mastercard, RuPay",
-    },
-    {
-      id: "upi" ,
-      name: "UPI",
-      icon: DevicePhoneMobileIcon,
-      description: "Pay using any UPI app",
-    },
-    {
-      id: "netbanking" ,
-      name: "Net Banking",
-      icon: BuildingLibraryIcon,
-      description: "All major banks supported",
-    },
-    {
-      id: "wallet" ,
-      name: "Wallets",
-      icon: WalletIcon,
-      description: "Paytm, PhonePe, Google Pay",
-    },
-  ]
-
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handlePromoApply = () => {
-    if (promoCode.toLowerCase() === "welcome10") {
-      setPromoApplied(true)
+  const createHostedCheckout = async () => {
+    setIsPaying(true);
+    setCheckoutError("");
+    try {
+      const response = await axiosInstance.post(`/orders/${orderId}/checkout/session`, {
+        promoCode: promoCode.trim() || null,
+      });
+      const data = response.data?.data || {};
+      setPricing(data.pricing || null);
+      setCheckoutMode(data.mode || null);
+      if (data.order) {
+        setOrder(data.order);
+        setTotalPrice(Number(data.order.totalPrice || data.pricing?.totalPrice || totalPrice || 0));
+      }
+      if (data.mode === "local_dev") {
+        const complete = await axiosInstance.post(`/orders/${orderId}/checkout/complete`, {
+          paymentMethod: "local_dev_checkout",
+          metadata: { promoCode: promoCode.trim() || null },
+        });
+        const paid = complete.data?.data || {};
+        navigate(`/checkout/${gigId}/${pkgName}/success?orderId=${orderId}`, {
+          replace: true,
+          state: {
+            order: paid.order,
+            transaction: paid.transaction,
+            gig: paid.order?.gig || gig,
+            pkg,
+          },
+        });
+        return;
+      }
+      if (!data.url) throw new Error("Hosted checkout URL was not returned");
+      window.location.assign(data.url);
+    } catch (error) {
+      setCheckoutError(error.response?.data?.message || error.message || "Could not start secure checkout.");
+    } finally {
+      setIsPaying(false);
     }
+  };
+
+  if (checkoutLoading) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">Loading checkout...</div>;
   }
 
-  const formatCardNumber = (value) => {
-    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "")
-    const matches = v.match(/\d{4,16}/g)
-    const match = (matches && matches[0]) || ""
-    const parts = []
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4))
-    }
-    if (parts.length) {
-      return parts.join(" ")
-    } else {
-      return v
-    }
+  if (!gig || !pkg || !orderId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md rounded-2xl border border-red-100 bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-gray-900">Checkout session unavailable</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            {checkoutError || "We could not find the order created for this checkout. Please return to the gig and try again."}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/checkout/${gigId}/${pkgName}`)}
+            className="mt-5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700"
+          >
+            Back to project brief
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  const formatExpiryDate = (value) => {
-    const v = value.replace(/\D/g, "")
-    if (v.length >= 2) {
-      return `${v.slice(0, 2)}/${v.slice(2, 4)}`
-    }
-    return v
-  }
+  const displayPricing = pricing || order?.metadata?.checkoutPricing || null;
+  const totalAmount = Number(displayPricing?.totalPrice ?? totalPrice ?? pkg.price ?? 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4">
+      <div className="mx-auto max-w-7xl px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Complete Your Order</h1>
-          <p className="text-gray-600">Secure payment to start your video editing project</p>
+          <h1 className="mb-2 text-3xl font-bold text-gray-900">Secure Checkout</h1>
+          <p className="text-gray-600">Vidlancing redirects you to a hosted payment page. Card details never touch our servers or frontend.</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Left Side - Order Summary */}
-          <div className="lg:col-span-1 order-2 lg:order-1">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <ShieldCheckIcon className="w-5 h-5 mr-2 text-green-500" />
-                Order Summary
+        {isLocalFakeCheckout && (
+          <div className="mb-8 rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <span className="mt-1 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">!</span>
+              <div className="text-sm text-amber-900">
+                <p className="font-semibold uppercase tracking-wide text-amber-800">Local development mode — no real payment</p>
+                <p className="mt-1">
+                  This environment has Stripe disabled. Clicking continue will mark the order as paid via the local fake-checkout endpoint so you can test the rest of the flow. <strong>No money is charged, no Stripe webhook is fired, and no escrow is actually held.</strong> Set <code className="rounded bg-white/60 px-1 py-0.5 text-[11px]">VITE_ALLOW_LOCAL_FAKE_CHECKOUT=false</code> and configure Stripe before any beta or staging traffic.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-3">
+          <aside className="order-2 lg:order-1">
+            <div className="sticky top-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900">
+                <ShieldCheckIcon className="mr-2 h-5 w-5 text-green-500" />
+                Verified Order Summary
               </h3>
-
               <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">{orderDetails.planName}</span>
-                  <span className="font-medium">₹{orderDetails.basePrice}</span>
-                </div>
-
-                {orderDetails.addOns.subtitles.selected && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">+ Subtitles</span>
-                    <span className="font-medium">₹{orderDetails.addOns.subtitles.price}</span>
-                  </div>
+                <SummaryRow label={pkg.name} value={`₹${Number(displayPricing?.subtotal ?? pkg.price ?? 0).toFixed(2)}`} />
+                {displayPricing?.discountAmount > 0 && (
+                  <SummaryRow label={`Discount ${displayPricing.discountCode || ""}`} value={`-₹${Number(displayPricing.discountAmount).toFixed(2)}`} tone="green" />
                 )}
-
-                {orderDetails.addOns.expressDelivery.selected && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">+ Express Delivery</span>
-                    <span className="font-medium">₹{orderDetails.addOns.expressDelivery.price}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Taxes</span>
-                  <span className="font-medium">₹{orderDetails.taxes}</span>
-                </div>
-
-                {promoApplied && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Discount (WELCOME10)</span>
-                    <span className="font-medium">-₹{orderDetails.discount}</span>
-                  </div>
-                )}
-
+                <SummaryRow label="Tax" value={`₹${Number(displayPricing?.taxAmount || 0).toFixed(2)}`} />
+                <SummaryRow label="Client service fee" value={`₹${Number(displayPricing?.clientFeeAmount || 0).toFixed(2)}`} />
                 <div className="border-t pt-4">
-                  <div className="flex justify-between items-center">
+                  <div className="flex items-center justify-between">
                     <span className="text-lg font-semibold text-gray-900">Total</span>
-                    <span className="text-2xl font-bold text-gray-900">₹{totalAmount}</span>
+                    <span className="text-2xl font-bold text-gray-900">₹{totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
-
-                <div className="bg-purple-50 rounded-lg p-3 mt-4">
+                <div className="rounded-lg bg-purple-50 p-3">
                   <div className="flex items-center text-sm text-purple-700">
-                    <ClockIcon className="w-4 h-4 mr-2" />
-                    <span className="font-medium">Estimated Delivery: {orderDetails.estimatedDelivery}</span>
-                  </div>
-                </div>
-
-                <div className="bg-green-50 rounded-lg p-3">
-                  <div className="flex items-start text-sm text-green-700">
-                    <CheckCircleIcon className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">100% Satisfaction Guarantee</p>
-                      <p className="text-xs mt-1">Free revisions until you're happy</p>
-                    </div>
+                    <ClockIcon className="mr-2 h-4 w-4" />
+                    <span className="font-medium">Order #{orderNumber || orderId}</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </aside>
 
-          {/* Right Side - Payment Form */}
-          <div className="lg:col-span-2 order-1 lg:order-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <main className="order-1 lg:order-2 lg:col-span-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
               <div className="mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">Secure Your Project</h2>
-                <p className="text-gray-600 text-sm">Choose your preferred payment method</p>
+                <div className="mb-3 inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                  Hosted checkout, webhook-confirmed escrow
+                </div>
+                <h2 className="mb-2 text-xl font-semibold text-gray-900">Pay securely with Stripe Checkout</h2>
+                <p className="text-sm text-gray-600">
+                  You will be redirected to Stripe to enter payment details. After Stripe confirms payment through a signed webhook, the order moves to active escrow.
+                </p>
               </div>
 
-              <form className="space-y-6">
-                {/* Payment Methods */}
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-4 block">Payment Method</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {paymentMethods.map((method) => (
-                      <label
-                        key={method.id}
-                        className={`relative flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                          selectedPaymentMethod === method.id
-                            ? "border-purple-500 bg-purple-50"
-                            : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value={method.id}
-                          checked={selectedPaymentMethod === method.id}
-                          onChange={(e) => setSelectedPaymentMethod(e.target.value )}
-                          className="sr-only"
-                        />
-                        <method.icon className="w-6 h-6 text-gray-600 mr-3" />
-                        <div>
-                          <p className="font-medium text-gray-900">{method.name}</p>
-                          <p className="text-xs text-gray-500">{method.description}</p>
-                        </div>
-                        {selectedPaymentMethod === method.id && (
-                          <CheckCircleIcon className="w-5 h-5 text-purple-500 absolute top-2 right-2" />
-                        )}
-                      </label>
-                    ))}
+              <div className="grid gap-3 sm:grid-cols-3">
+                {["Cards", "Wallets", "Bank redirects"].map((method) => (
+                  <div key={method} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <CreditCardIcon className="h-6 w-6 text-purple-600" />
+                    <p className="mt-2 text-sm font-semibold text-gray-900">{method}</p>
+                    <p className="mt-1 text-xs text-gray-500">Handled by the payment provider.</p>
                   </div>
+                ))}
+              </div>
+
+              <div className="mt-6">
+                <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
+                  <TagIcon className="mr-2 h-4 w-4" />
+                  Promo code
+                </label>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 transition-all duration-200 focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter promo code"
+                />
+                <p className="mt-2 text-xs text-gray-500">Discounts, taxes, service fees, and payouts are recalculated and verified on the backend before checkout starts.</p>
+              </div>
+
+              <div className="mt-6 rounded-lg bg-gray-50 p-4">
+                <p className="text-xs leading-relaxed text-gray-600">
+                  By proceeding, you agree to Vidlancing&apos;s Terms of Service and Refund Policy. We do not store card numbers, CVV, UPI IDs, wallet credentials, or bank login details.
+                </p>
+              </div>
+
+              {checkoutError && (
+                <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {checkoutError}
                 </div>
+              )}
 
-                {/* Payment Form Fields */}
-                <div className="space-y-4">
-                  {selectedPaymentMethod === "card" && (
-                    <>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Card Number</label>
-                        <input
-                          type="text"
-                          value={formData.cardNumber}
-                          onChange={(e) => handleInputChange("cardNumber", formatCardNumber(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                          placeholder="1234 5678 9012 3456"
-                          maxLength={19}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-700 mb-2 block">Expiry Date</label>
-                          <input
-                            type="text"
-                            value={formData.expiryDate}
-                            onChange={(e) => handleInputChange("expiryDate", formatExpiryDate(e.target.value))}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                            placeholder="MM/YY"
-                            maxLength={5}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-700 mb-2 block">CVV</label>
-                          <input
-                            type="text"
-                            value={formData.cvv}
-                            onChange={(e) => handleInputChange("cvv", e.target.value.replace(/\D/g, ""))}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                            placeholder="123"
-                            maxLength={4}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Cardholder Name</label>
-                        <input
-                          type="text"
-                          value={formData.cardholderName}
-                          onChange={(e) => handleInputChange("cardholderName", e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                          placeholder="John Doe"
-                        />
-                      </div>
-                    </>
-                  )}
+              <button
+                type="button"
+                onClick={createHostedCheckout}
+                disabled={isPaying}
+                className={`mt-6 flex w-full items-center justify-center rounded-lg px-6 py-4 font-semibold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-gray-400 ${
+                  isLocalFakeCheckout ? "bg-amber-600 hover:bg-amber-700" : "bg-purple-600 hover:bg-purple-700"
+                }`}
+              >
+                {isPaying ? (
+                  isLocalFakeCheckout ? "Completing local fake checkout..." : "Starting secure checkout..."
+                ) : (
+                  <>
+                    <ArrowTopRightOnSquareIcon className="mr-2 h-5 w-5" />
+                    {isLocalFakeCheckout
+                      ? `Use Local Fake Checkout (no charge) - ₹${totalAmount.toFixed(2)}`
+                      : `Continue to Hosted Checkout - ₹${totalAmount.toFixed(2)}`}
+                  </>
+                )}
+              </button>
 
-                  {selectedPaymentMethod === "upi" && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-2 block">UPI ID</label>
-                      <input
-                        type="text"
-                        value={formData.upiId}
-                        onChange={(e) => handleInputChange("upiId", e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                        placeholder="yourname@paytm"
-                      />
-                    </div>
-                  )}
-
-                  {selectedPaymentMethod === "netbanking" && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-2 block">Select Bank</label>
-                      <select
-                        value={formData.bankName}
-                        onChange={(e) => handleInputChange("bankName", e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="">Choose your bank</option>
-                        <option value="sbi">State Bank of India</option>
-                        <option value="hdfc">HDFC Bank</option>
-                        <option value="icici">ICICI Bank</option>
-                        <option value="axis">Axis Bank</option>
-                        <option value="kotak">Kotak Mahindra Bank</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {selectedPaymentMethod === "wallet" && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-2 block">Select Wallet</label>
-                      <select
-                        value={formData.walletProvider}
-                        onChange={(e) => handleInputChange("walletProvider", e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="">Choose wallet</option>
-                        <option value="paytm">Paytm</option>
-                        <option value="phonepe">PhonePe</option>
-                        <option value="googlepay">Google Pay</option>
-                        <option value="amazonpay">Amazon Pay</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Promo Code */}
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block flex items-center">
-                    <TagIcon className="w-4 h-4 mr-2" />
-                    Promo Code (Optional)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                      placeholder="Enter promo code"
-                      disabled={promoApplied}
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePromoApply}
-                      disabled={promoApplied || !promoCode}
-                      className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                        promoApplied
-                          ? "bg-green-100 text-green-700 cursor-not-allowed"
-                          : promoCode
-                            ? "bg-purple-600 text-white hover:bg-purple-700"
-                            : "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      }`}
-                    >
-                      {promoApplied ? "Applied" : "Apply"}
-                    </button>
-                  </div>
-                  {promoApplied && (
-                    <p className="text-sm text-green-600 mt-2 flex items-center">
-                      <CheckCircleIcon className="w-4 h-4 mr-1" />
-                      Promo code applied successfully!
-                    </p>
-                  )}
-                </div>
-
-                {/* Legal Text */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    By proceeding, you agree to Vidlancer's{" "}
-                    <a href="#" className="text-purple-600 hover:text-purple-700 underline">
-                      Terms of Service
-                    </a>{" "}
-                    and{" "}
-                    <a href="#" className="text-purple-600 hover:text-purple-700 underline">
-                      Refund Policy
-                    </a>
-                    . Your payment information is encrypted and secure.
-                  </p>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t">
-                  <button
-                    type="button"
-                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                  >
-                    Go Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-semibold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  >
-                    Pay ₹{totalAmount} & Start Project
-                  </button>
-                </div>
-              </form>
+              <div className="mt-4 flex items-start rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                <CheckCircleIcon className="mr-2 mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>Payment success is confirmed only by the provider webhook before escrow becomes active.</span>
+              </div>
             </div>
-          </div>
+          </main>
         </div>
       </div>
     </div>
-  )
+  );
+}
+
+function SummaryRow({ label, value, tone = "default" }) {
+  return (
+    <div className={`flex justify-between text-sm ${tone === "green" ? "text-green-600" : "text-gray-600"}`}>
+      <span>{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
 }

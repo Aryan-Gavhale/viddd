@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import axiosInstance from "../utils/axios";
-//import PortfolioUpload from "../components/PortfolioUpload.jsx";
+//import PortfolioUpload from "./PortfolioUpload.jsx";
 
 function Dashboard() {
   const { id, firstname, role } = useSelector((state) => state.user);

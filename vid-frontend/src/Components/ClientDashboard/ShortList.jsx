@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
-import { openChatWidget } from "../../hooks/useChat";
+import { openChatWidget } from "../../Hooks/useChat.js";
 import { Filter, Eye, MessageCircle, UserPlus, Star, Calendar, DollarSign, Users } from "lucide-react";
 
 export default function Shortlist() {

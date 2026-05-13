@@ -18,6 +18,7 @@ import {
   Trash2,
   Clock,
   User,
+  RefreshCcw,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axiosInstance from '../../api/axiosInstance';
@@ -55,6 +56,24 @@ function buildChildFolderPath(parent, name) {
   const p = normalizePath(parent);
   if (p === '/') return `/${name}`;
   return `${p}/${name}`;
+}
+
+function isStorageCredentialsError(error) {
+  const message = `${error?.response?.data?.message || ''} ${error?.message || ''}`.toLowerCase();
+  return (
+    message.includes('could not load credentials') ||
+    message.includes('credential') ||
+    message.includes('s3 bucket is not configured') ||
+    message.includes('aws')
+  );
+}
+
+function devPlaceholderKey(orderId, folder, file) {
+  return `dev-placeholder/order/${orderId}${normalizePath(folder)}/${Date.now()}-${encodeURIComponent(file.name)}`;
+}
+
+function allowDevPlaceholderUploads() {
+  return import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_PLACEHOLDER_UPLOADS === 'true';
 }
 
 export default function ProjectFileManager() {
@@ -199,25 +218,35 @@ export default function ProjectFileManager() {
     if (!file) return;
     setUploading(true);
     try {
-      const res = await axiosInstance.post('/project-files/presign', {
-        orderId,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        folder,
-      });
-      const d = res.data?.data ?? res.data;
-      const { uploadUrl, fileKey, headers: hdrs } = d;
-      if (!uploadUrl || !fileKey) throw new Error('No upload URL');
+      let fileKey = null;
+      let usedDevPlaceholder = false;
+      try {
+        const res = await axiosInstance.post('/project-files/presign', {
+          orderId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          folder,
+        });
+        const d = res.data?.data ?? res.data;
+        const { uploadUrl, fileKey: signedFileKey, headers: hdrs } = d;
+        if (!uploadUrl || !signedFileKey) throw new Error('No upload URL');
 
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': (hdrs && hdrs['Content-Type']) || file.type || 'application/octet-stream',
-        },
-        credentials: 'omit',
-      });
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': (hdrs && hdrs['Content-Type']) || file.type || 'application/octet-stream',
+          },
+          credentials: 'omit',
+        });
+        fileKey = signedFileKey;
+      } catch (uploadError) {
+        if (!isStorageCredentialsError(uploadError)) throw uploadError;
+        if (!allowDevPlaceholderUploads()) throw uploadError;
+        usedDevPlaceholder = true;
+        fileKey = devPlaceholderKey(orderId, folder, file);
+      }
 
       await axiosInstance.post('/project-files/upload', {
         orderId,
@@ -227,7 +256,11 @@ export default function ProjectFileManager() {
         mimeType: file.type || 'application/octet-stream',
         folder,
       });
-      toast.success('Uploaded');
+      toast.success(
+        usedDevPlaceholder
+          ? 'Workflow test file added — no real video stored. Use only for exercising the project flow.'
+          : 'Uploaded'
+      );
       await loadList();
     } catch (e) {
       console.error(e);
@@ -397,6 +430,7 @@ export default function ProjectFileManager() {
                         row.mimeType === FOLDER_MIME ? enterFolder(row.fileName) : openDetails(row)
                       }
                       onDelete={onDelete}
+                      onRefresh={loadList}
                     />
                   ))}
                   {items.length === 0 && (
@@ -426,9 +460,42 @@ export default function ProjectFileManager() {
   );
 }
 
-function FileCard({ row, onOpen, onDelete }) {
+function FileCard({ row, onOpen, onDelete, onRefresh }) {
+  const [mediaState, setMediaState] = useState(null);
+  const [retrying, setRetrying] = useState(false);
   const Icon = fileIcon(row.mimeType);
   const isDir = row.mimeType === FOLDER_MIME;
+  const isVideo = row.mimeType?.startsWith('video/');
+  useEffect(() => {
+    let alive = true;
+    setMediaState(null);
+    if (!isVideo || !row?.id) return undefined;
+    axiosInstance
+      .get(`/media/assets/${row.id}`)
+      .then((res) => {
+        if (alive) setMediaState(res.data?.data || null);
+      })
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, [isVideo, row?.id]);
+  const media = mediaState?.asset || row.media || null;
+  const posterUrl = mediaState?.urls?.poster?.url;
+  const retryMedia = async (event) => {
+    event.stopPropagation();
+    if (!media?.id) return;
+    setRetrying(true);
+    try {
+      await axiosInstance.post(`/media/assets/${media.id}/retry`);
+      toast.success('Media processing retry queued');
+      await onRefresh?.();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not retry media processing');
+    } finally {
+      setRetrying(false);
+    }
+  };
   return (
     <motion.button
       type="button"
@@ -439,11 +506,15 @@ function FileCard({ row, onOpen, onDelete }) {
       className="group flex flex-col items-stretch gap-2 rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-left transition hover:border-cyan-800/50 hover:bg-slate-800/40"
     >
       <div className="flex items-start justify-between gap-2">
-        <div
-          className={`rounded-lg p-2 ${isDir ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-800 text-cyan-300'}`}
-        >
-          <Icon className="h-6 w-6" />
-        </div>
+        {posterUrl ? (
+          <img src={posterUrl} alt="" className="h-10 w-14 rounded-lg object-cover bg-slate-800" />
+        ) : (
+          <div
+            className={`rounded-lg p-2 ${isDir ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-800 text-cyan-300'}`}
+          >
+            <Icon className="h-6 w-6" />
+          </div>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -462,8 +533,38 @@ function FileCard({ row, onOpen, onDelete }) {
       <p className="text-xs text-slate-500">
         {isDir ? 'Folder' : formatBytes(row.fileSize)} · v{row.version ?? 1}
       </p>
+      {media?.status && (
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${mediaBadgeClass(media.status)}`}>
+            {media.status === 'PLACEHOLDER' ? 'workflow test file' : media.status.replaceAll('_', ' ').toLowerCase()}
+          </span>
+          {['FAILED', 'QUARANTINED'].includes(media.status) && (
+            <button
+              type="button"
+              onClick={retryMedia}
+              disabled={retrying}
+              className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-300"
+            >
+              {retrying ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+      {media?.status === 'PLACEHOLDER' && (
+        <p className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] leading-snug text-purple-200">
+          No real video stored. Local-only test record for exercising the project flow.
+        </p>
+      )}
     </motion.button>
   );
+}
+
+function mediaBadgeClass(status) {
+  if (status === 'READY') return 'bg-emerald-500/15 text-emerald-300';
+  if (status === 'FAILED' || status === 'QUARANTINED') return 'bg-rose-500/15 text-rose-300';
+  if (status === 'PLACEHOLDER') return 'bg-purple-500/15 text-purple-300';
+  return 'bg-cyan-500/15 text-cyan-300';
 }
 
 function FolderTree({ childrenMap, current, onSelect, basePath = '/' }) {

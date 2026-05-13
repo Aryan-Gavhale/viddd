@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
-import { openChatWidget } from "../../hooks/useChat";
+import { openChatWidget } from "../../Hooks/useChat.js";
 
 const STATUS_META = {
   OPEN: { label: "Open", color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },

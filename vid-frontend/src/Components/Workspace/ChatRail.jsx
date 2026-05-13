@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pin, X } from "lucide-react";
+import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios.js";
 import ChatPanel from "../Chat/ChatPanel.jsx";
 import { Avatar } from "./Avatar.jsx";
@@ -47,13 +48,19 @@ function PeerHeader({ peer, role }) {
 function PinnedBar({ jobId }) {
   const [pinned, setPinned] = useState([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const fetchPinned = async () => {
     try {
+      setLoadError("");
       const res = await axiosInstance.get(`/workspace/projects/${jobId}/pinned`);
       setPinned(res.data?.data?.pinned || []);
-    } catch {
+    } catch (e) {
       setPinned([]);
+      // Show inline rather than failing silently. Don't toast on every
+      // remount or when the user is just navigating between projects, just
+      // surface the load failure inline so they know to retry.
+      setLoadError(e?.response?.data?.message || "Could not load pinned messages.");
     }
   };
 
@@ -65,10 +72,19 @@ function PinnedBar({ jobId }) {
     try {
       await axiosInstance.post(`/workspace/projects/${jobId}/pinned`, { messageId });
       setPinned((prev) => prev.filter((p) => String(p.messageId) !== String(messageId)));
-    } catch {
-      /* noop */
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Could not unpin message");
     }
   };
+
+  if (loadError) {
+    return (
+      <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-200">
+        {loadError}
+        <button type="button" onClick={fetchPinned} className="ml-2 font-semibold underline">Retry</button>
+      </div>
+    );
+  }
 
   if (pinned.length === 0) return null;
 

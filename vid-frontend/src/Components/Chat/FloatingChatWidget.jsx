@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useChatWidget, useChat } from "../../hooks/useChat.js";
+import { useChatWidget, useChat } from "../../Hooks/useChat.js";
 import chatStore from "../../state/chatStore.js";
 import ChatPanel from "./ChatPanel.jsx";
 import { selectUser } from "../../redux/userSlice";

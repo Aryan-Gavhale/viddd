@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import logger from "../Utils/logger.js";
 import { queueOrderNotification } from "../Queues/processors.js";
 import type { ExpressRequest, ExpressResponse, NextFunction, DbRow } from "../types/index.js";
+import { calculateVerifiedOrderPricing } from "../Services/pricing.service.js";
+import { createHostedCheckoutSession, isLocalFakeCheckoutAllowed } from "../Services/payment.service.js";
 
 type Handler = (
   req: ExpressRequest,
@@ -149,17 +151,23 @@ const createOrder: Handler = async (req, res, next) => {
       throw new ApiError(500, "Invalid package price format");
     }
 
-    const totalPrice = expressDelivery ? basePrice * 1.5 : basePrice;
+    const pricing = await calculateVerifiedOrderPricing({
+      gigId: Number(gig.id),
+      selectedPackage: String(selectedPackage),
+      expressDelivery: Boolean(expressDelivery),
+    });
+    const totalPrice = pricing.totalPrice;
     const priorityFee = expressDelivery ? basePrice * 0.5 : null;
     const deliveryDeadline = new Date(Date.now() + Number(gr.deliveryTime || 7) * 24 * 60 * 60 * 1000);
 
-    const platformFeePercent = 12.5;
-    const clientFeePercent = 3.5;
-    const platformFeeAmount = Math.round(totalPrice * (platformFeePercent / 100));
-    const clientFeeAmount = Math.round(totalPrice * (clientFeePercent / 100));
-    const freelancerPayout = totalPrice - platformFeeAmount;
+    const platformFeePercent = pricing.platformFeePercent;
+    const clientFeePercent = pricing.clientFeePercent;
+    const platformFeeAmount = pricing.platformFeeAmount;
+    const clientFeeAmount = pricing.clientFeeAmount;
+    const freelancerPayout = pricing.freelancerPayout;
 
-    const metadata = JSON.stringify({ clientIp: req.ip });
+    const safeReferenceUrl = typeof referenceUrl === "string" && referenceUrl.trim() ? referenceUrl.trim() : null;
+    const metadata = JSON.stringify({ clientIp: req.ip, checkoutPricing: pricing });
     const uploadedJson = uploadedFiles != null ? JSON.stringify(uploadedFiles) : null;
     const customJson = customDetails != null ? JSON.stringify(customDetails) : null;
     const orderSource = req.headers["user-agent"]?.includes("Mobile") ? "MOBILE" : "WEB";
@@ -187,7 +195,7 @@ const createOrder: Handler = async (req, res, next) => {
           videoType ?? null,
           numberOfVideos ?? null,
           totalDuration ?? null,
-          referenceUrl ?? null,
+          safeReferenceUrl,
           aspectRatio ?? null,
           addSubtitles ?? false,
           expressDelivery ?? false,
@@ -277,8 +285,196 @@ const createOrder: Handler = async (req, res, next) => {
     return res.status(201).json(new ApiResponse(201, order, "Order created successfully"));
   } catch (error) {
     if (error instanceof ApiError) return next(error);
-    logger.error("Error creating order for client %s: %s", req.user?.id ?? "unknown", (error as Error).message);
+    const e = error as Error;
+    logger.error(`Error creating order for client ${req.user?.id ?? "unknown"}: ${e.message}\n${e.stack}`);
     return next(new ApiError(500, "Failed to create order"));
+  }
+};
+
+const createOrderCheckoutSession: Handler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    const { orderId } = req.params as Record<string, string>;
+    const oid = parseInt(orderId, 10);
+    if (!Number.isFinite(oid) || oid <= 0) {
+      throw new ApiError(400, "Valid orderId is required");
+    }
+    const body = req.body as Record<string, unknown>;
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode : null;
+    const session = await createHostedCheckoutSession(oid, req.user.id, promoCode);
+    return res.status(201).json(new ApiResponse(201, session, "Hosted checkout session created"));
+  } catch (error) {
+    if (error instanceof ApiError) return next(error);
+    const e = error as Error;
+    logger.error(`Error creating hosted checkout session: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, "Failed to create hosted checkout session"));
+  }
+};
+
+// Local-only checkout completion. Production payment success must come from the
+// signed Stripe webhook after a hosted/tokenized checkout has completed.
+const completeOrderPayment: Handler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    if (!isLocalFakeCheckoutAllowed()) {
+      throw new ApiError(
+        403,
+        "Local checkout completion is disabled. Use hosted checkout and wait for payment webhook confirmation."
+      );
+    }
+
+    const userId = req.user.id;
+    const { orderId } = req.params as Record<string, string>;
+    const oid = parseInt(orderId, 10);
+    if (!Number.isFinite(oid) || oid <= 0) {
+      throw new ApiError(400, "Valid orderId is required");
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const paymentMethod = String(body.paymentMethod || "checkout").slice(0, 80);
+    const now = new Date();
+
+    const tx = await withTransaction(async (client) => {
+      const orderRow = await client.query(
+        `SELECT o.*, o."gig_id" AS "gigId", o."client_id" AS "clientId", o."freelancer_id" AS "freelancerId",
+                fp."user_id" AS "freelancerUserId"
+         FROM "Order" o
+         JOIN "FreelancerProfile" fp ON fp."id" = o."freelancer_id"
+         WHERE o."id" = $1 AND o."deletedAt" IS NULL
+         FOR UPDATE`,
+        [oid]
+      );
+      const order = mapOrderRow(orderRow.rows[0] as DbRow | null) as DbRow | null;
+      if (!order) throw new ApiError(404, "Order not found");
+      if (Number(order.clientId) !== userId) {
+        throw new ApiError(403, "Only the client who placed this order can complete checkout");
+      }
+      if (String(order.status) === "REJECTED") {
+        throw new ApiError(400, "Rejected orders cannot be paid");
+      }
+
+      const existing = await client.query(
+        `SELECT * FROM "Transaction"
+         WHERE "order_id" = $1 AND "type" = 'PAYMENT'::"TransactionType"
+         ORDER BY "createdAt" DESC
+         LIMIT 1`,
+        [oid]
+      );
+
+      let transaction = existing.rows[0] as DbRow | undefined;
+      if (transaction && transaction.status !== "COMPLETED") {
+        transaction = (
+          await client.query(
+            `UPDATE "Transaction"
+             SET "status" = 'COMPLETED'::"TransactionStatus",
+                 "paymentMethod" = COALESCE("paymentMethod", $2),
+                 "metadata" = COALESCE("metadata", '{}'::jsonb) || $3::jsonb
+             WHERE "id" = $1
+             RETURNING *`,
+            [
+              transaction.id,
+              paymentMethod,
+              JSON.stringify({ completedVia: "checkout", completedAt: now.toISOString() }),
+            ]
+          )
+        ).rows[0] as DbRow;
+      } else if (!transaction) {
+        transaction = (
+          await client.query(
+            `INSERT INTO "Transaction" (
+              "order_id", "user_id", "amount", "type", "paymentMethod", "status", "paymentGatewayId", "metadata"
+            ) VALUES (
+              $1, $2, $3, 'PAYMENT'::"TransactionType", $4, 'COMPLETED'::"TransactionStatus", $5, $6::jsonb
+            )
+            RETURNING *`,
+            [
+              oid,
+              userId,
+              Number(order.totalPrice) || 0,
+              paymentMethod,
+              `checkout_${uuidv4()}`,
+              JSON.stringify({
+                completedVia: "checkout",
+                providerMode: "local",
+                userAgent: req.headers["user-agent"] || null,
+              }),
+            ]
+          )
+        ).rows[0] as DbRow;
+      }
+
+      if (!["CURRENT", "COMPLETED"].includes(String(order.status))) {
+        await client.query(
+          `UPDATE "Order"
+           SET "status" = 'CURRENT'::"OrderStatus",
+               "escrowStatus" = 'HELD',
+               "progress" = GREATEST(COALESCE("progress", 0), 5),
+               "updatedAt" = $1,
+               "lastNotifiedAt" = $1
+           WHERE "id" = $2 AND "deletedAt" IS NULL`,
+          [now, oid]
+        );
+        await client.query(
+          `INSERT INTO "OrderStatusHistory" ("order_id", "status", "changed_by")
+           VALUES ($1, 'CURRENT'::"OrderStatus", $2)`,
+          [oid, userId]
+        );
+      } else if (String(order.escrowStatus || "NONE") === "NONE") {
+        await client.query(
+          `UPDATE "Order"
+           SET "escrowStatus" = 'HELD', "updatedAt" = $1, "lastNotifiedAt" = $1
+           WHERE "id" = $2 AND "deletedAt" IS NULL`,
+          [now, oid]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO "Notification" ("user_id", "type", "content", "entityType", "entityId", "priority", "deliveryMethod")
+         VALUES
+           ($1, 'PAYMENT'::"NotificationType", $2, 'ORDER', $3, 'NORMAL'::"Priority", 'IN_APP'),
+           ($4, 'ORDER_UPDATE'::"NotificationType", $5, 'ORDER', $6, 'HIGH'::"Priority", 'IN_APP')`,
+        [
+          userId,
+          `Payment completed for order #${String(order.orderNumber)}.`,
+          oid,
+          Number(order.freelancerUserId),
+          `Order #${String(order.orderNumber)} is paid and ready to start.`,
+          oid,
+        ]
+      );
+
+      return transaction;
+    });
+
+    const order = await buildOrderCreateResponse(oid);
+    if (!order) throw new ApiError(500, "Payment completed but failed to load order");
+    const freelancerUserId = Number((order.freelancer as DbRow & { user?: DbRow })?.user?.id);
+    if (Number.isFinite(freelancerUserId)) {
+      queueOrderNotification({
+        orderId: oid,
+        clientId: userId,
+        freelancerId: freelancerUserId,
+        orderNumber: String(order.orderNumber),
+        status: "CURRENT",
+      }).catch((err) => logger.error(`Notification queue error: ${(err as Error).message}`));
+    }
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { order, transaction: tx },
+        "Payment completed and gig workspace is ready"
+      )
+    );
+  } catch (error) {
+    if (error instanceof ApiError) return next(error);
+    const e = error as Error;
+    logger.error(`Error completing order payment: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, "Failed to complete payment"));
   }
 };
 
@@ -1339,6 +1535,8 @@ const generateOrderTasks = (order: DbRow) => {
 
 export {
   createOrder,
+  createOrderCheckoutSession,
+  completeOrderPayment,
   updateOrderStatus,
   getOrder,
   getClientOrders,

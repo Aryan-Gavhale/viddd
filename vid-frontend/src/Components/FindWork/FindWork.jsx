@@ -65,27 +65,44 @@ export default function SearchAndBrowsePage() {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   };
 
-  // Handle saving/unsaving a job
-  const handleSaveToggle = (jobId) => {
+  // Handle saving/unsaving a job via the shared SavedItem backend.
+  const handleSaveToggle = async (jobId) => {
+    const wasSaved = savedJobs.has(jobId);
     setSavedJobs((prev) => {
-      const newSaved = new Set(prev);
-      if (newSaved.has(jobId)) {
-        newSaved.delete(jobId);
-      } else {
-        newSaved.add(jobId);
-      }
-      // Optionally persist to localStorage or backend here
-      sessionStorage.setItem('savedJobs', JSON.stringify([...newSaved]));
-      return newSaved;
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
     });
+    try {
+      if (wasSaved) {
+        await axiosInstance.delete(`/saved-items/JOB/${jobId}`);
+      } else {
+        await axiosInstance.post("/saved-items", { entityType: "JOB", entityId: jobId });
+      }
+      window.dispatchEvent(new CustomEvent("saved-items:changed"));
+    } catch (error) {
+      setSavedJobs((prev) => {
+        const next = new Set(prev);
+        if (wasSaved) next.add(jobId);
+        else next.delete(jobId);
+        return next;
+      });
+      console.error("Failed to update saved job", error);
+    }
   };
 
-  // Load saved jobs from localStorage on mount
+  // Load saved jobs from backend on mount.
   useEffect(() => {
-    const saved = sessionStorage.getItem('savedJobs');
-    if (saved) {
-      setSavedJobs(new Set(JSON.parse(saved)));
-    }
+    axiosInstance
+      .get("/saved-items", { params: { entityType: "JOB", limit: 50 } })
+      .then((res) => {
+        const ids = (res.data?.data?.items || []).map((item) => Number(item.entityId));
+        setSavedJobs(new Set(ids));
+      })
+      .catch(() => {
+        setSavedJobs(new Set());
+      });
   }, []);
 
   // Sort and filter jobs based on active tab

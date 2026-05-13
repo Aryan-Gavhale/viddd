@@ -55,6 +55,7 @@ const CreateProfile = lazy(() => import('./Components/CreateProfile/Page'));
 const DashboardPage = lazy(() => import('./Components/Dashboard'));
 const Settings = lazy(() => import('./Components/Settings/settings'));
 const NotificationsPage = lazy(() => import('./Components/Notifications/NotificationsPage'));
+const SavedItemsPage = lazy(() => import('./Components/SavedItems/SavedItemsPage'));
 const ChatInterface = lazy(() => import('./Components/ChatPage/ChatInterface'));
 import FloatingChatWidget from './Components/Chat/FloatingChatWidget';
 const ProjectWorkspace = lazy(() => import('./Components/ProjectManagement/ProjectWorkspace'));
@@ -74,6 +75,8 @@ const RevisionTracker = lazy(() => import('./Components/RevisionTracker/Revision
 const GanttTimeline = lazy(() => import('./Components/ProjectTimeline/GanttTimeline'));
 const ProjectBriefForm = lazy(() => import('./Components/GigSection/Project-brief- form'));
 const GigPaymentPage = lazy(() => import('./Components/GigSection/Payment-page'));
+const CheckoutSuccessPage = lazy(() => import('./Components/GigSection/CheckoutSuccessPage'));
+const GigOrderWorkspace = lazy(() => import('./Components/Workspace/GigOrderWorkspace'));
 
 // Editor / Freelancer
 const VideoEditorDashboard = lazy(() => import('./Components/EditorDashboard/editorDashboard'));
@@ -217,6 +220,8 @@ function NavbarPage() {
             <Route path="/dashboard" element={<ProtectedRoute><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="Dashboard" /><DashboardPage /></PageSuspense></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><PageSuspense><PageTitle title="Settings" /><Settings /></PageSuspense></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><PageSuspense><PageTitle title="Notifications" /><NotificationsPage /></PageSuspense></ProtectedRoute>} />
+            <Route path="/saved" element={<ProtectedRoute><PageSuspense><PageTitle title="Saved Items" /><SavedItemsPage /></PageSuspense></ProtectedRoute>} />
+            <Route path="/favorites" element={<ProtectedRoute><PageSuspense><PageTitle title="Favorites" /><SavedItemsPage /></PageSuspense></ProtectedRoute>} />
             <Route path="/messages" element={<ProtectedRoute><PageSuspense><PageTitle title="Messages" /><ChatInterface /></PageSuspense></ProtectedRoute>} />
             <Route path="/workspace" element={
               <ProtectedRoute>
@@ -242,6 +247,8 @@ function NavbarPage() {
             <Route path="/team-proposals/:jobId" element={<ProtectedRoute><PageSuspense><PageTitle title="Team Proposals" /><TeamProposalBuilder /></PageSuspense></ProtectedRoute>} />
 
             {/* Order-scoped resources */}
+            <Route path="/orders/:orderId" element={<ProtectedRoute><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
+            <Route path="/orders/:orderId/details" element={<ProtectedRoute><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
             <Route path="/orders/:orderId/files" element={<ProtectedRoute><PageSuspense><PageTitle title="Project Files" /><ProjectFileManager /></PageSuspense></ProtectedRoute>} />
             <Route path="/orders/:orderId/revisions" element={<ProtectedRoute><PageSuspense><PageTitle title="Revision Tracker" /><RevisionTracker /></PageSuspense></ProtectedRoute>} />
             <Route path="/projects/:jobId/timeline" element={<ProtectedRoute><PageSuspense><PageTitle title="Project Timeline" /><GanttTimeline /></PageSuspense></ProtectedRoute>} />
@@ -249,6 +256,7 @@ function NavbarPage() {
             {/* Checkout flow */}
             <Route path="/checkout/:gigId/:pkgName" element={<ProtectedRoute><PageSuspense><PageTitle title="Project Brief" /><ProjectBriefForm /></PageSuspense></ProtectedRoute>} />
             <Route path="/checkout/:gigId/:pkgName/payment" element={<ProtectedRoute><PageSuspense><PageTitle title="Payment" /><GigPaymentPage /></PageSuspense></ProtectedRoute>} />
+            <Route path="/checkout/:gigId/:pkgName/success" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Payment Completed" /><CheckoutSuccessPage /></PageSuspense></ProtectedRoute>} />
 
             {/* ═══════════════════════════════════════════
                 PROTECTED — Freelancer / Editor
@@ -256,6 +264,7 @@ function NavbarPage() {
             <Route path="/editor/dashboard" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="Editor Dashboard" /><VideoEditorDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/payments" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Payment Details" /><EditorPaymentDetails /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/workspace" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Workspace" /><WorkspaceShell /></PageSuspense></ProtectedRoute>} />
+            <Route path="/editor/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/gigs" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="My Gigs" /><GigDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/gigs/new" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Create Gig" /><CreateGigForm /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/gigs/:gigId/edit" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Update Gig" /><CreateGigForm isUpdate={true} /></PageSuspense></ProtectedRoute>} />
@@ -273,6 +282,7 @@ function NavbarPage() {
             <Route path="/client/dashboard" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="Client Dashboard" /><ClientDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/profile" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Client Profile" /><ClientProfile /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/workspace" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Workspace" /><WorkspaceShell /></PageSuspense></ProtectedRoute>} />
+            <Route path="/client/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/jobs" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="My Jobs" /><ClientJobs /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/jobs/new" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Post a Job" /><JobPosting /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/jobs/:jobId/shortlist" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Shortlist" /><Shortlist /></PageSuspense></ProtectedRoute>} />

@@ -19,10 +19,10 @@ export default function ProjectBriefForm() {
   const navigate = useNavigate();
 
   const location = useLocation();
-  const gig = location.state?.gig;
-  const pkg = location.state?.pkg;
-  console.log("Gig ID:", gigId);
-  console.log("Package Name:", pkgName);
+  const [gig, setGig] = useState(location.state?.gig || null);
+  const [pkg, setPkg] = useState(location.state?.pkg || null);
+  const [loadingPackage, setLoadingPackage] = useState(!location.state?.gig || !location.state?.pkg);
+  const [packageError, setPackageError] = useState("");
 
   const [formData, setFormData] = useState({
     projectTitle: "",
@@ -39,18 +39,74 @@ export default function ProjectBriefForm() {
   const [dragActive, setDragActive] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState([])
 
-  // const [gig, setGig] = useState(null);
-  // const [selectedPackage, setSelectedPackage] = useState(null);
+  useEffect(() => {
+    if (gig && pkg) {
+      setLoadingPackage(false);
+      return;
+    }
 
-  if (!gig || !pkg) {
-    // fallback to fetch if someone visits directly
-    return <div>Loading package...</div>;
+    const fetchGigPackage = async () => {
+      try {
+        setLoadingPackage(true);
+        setPackageError("");
+        const response = await axiosInstance.get(`/gigs/${gigId}`);
+        const gigData = response.data?.data;
+        const packages = Array.isArray(gigData?.pricing) ? gigData.pricing : [];
+        const selected = packages.find(
+          (item) => String(item.name || item.type).toLowerCase() === decodeURIComponent(pkgName || "").toLowerCase()
+        );
+
+        if (!gigData || !selected) {
+          throw new Error("Selected package is not available for this gig.");
+        }
+
+        setGig(gigData);
+        setPkg({
+          name: selected.name || selected.type || pkgName,
+          price: selected.price || 0,
+          description: selected.description || gigData.description || "",
+          deliveryTime: selected.deliveryTime || selected.delivery || gigData.deliveryTime,
+          revisions: selected.revisions || selected.revisionCount || gigData.revisionCount,
+        });
+      } catch (error) {
+        console.error("Failed to load checkout package:", error);
+        setPackageError(error.response?.data?.message || error.message || "Failed to load checkout package.");
+      } finally {
+        setLoadingPackage(false);
+      }
+    };
+
+    fetchGigPackage();
+  }, [gig, gigId, pkg, pkgName]);
+
+  if (loadingPackage) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">Loading package...</div>;
   }
 
+  if (packageError || !gig || !pkg) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md rounded-2xl border border-red-100 bg-white p-6 text-center shadow-sm">
+          <ExclamationTriangleIcon className="mx-auto h-10 w-10 text-red-500" />
+          <h1 className="mt-3 text-lg font-semibold text-gray-900">Checkout package unavailable</h1>
+          <p className="mt-2 text-sm text-gray-600">{packageError || "This gig package could not be loaded."}</p>
+          <button
+            type="button"
+            onClick={() => navigate(`/gigs/${gigId}`)}
+            className="mt-5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700"
+          >
+            Back to gig
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const packagePrice = Number(String(pkg.price ?? 0).replace(/[^\d.]/g, "")) || 0;
   const planDetails = {
     name: pkg.name,
-    price: pkg.price,
-    included: "3 Reels, 30 seconds each, Basic transitions, 3-day delivery",
+    price: packagePrice,
+    included: pkg.description || "Package deliverables and revisions as described by the editor.",
     maxVideos: 3,
     maxDurationPerVideo: 30,
   }
@@ -115,16 +171,25 @@ export default function ProjectBriefForm() {
     e.preventDefault();
   
     try {
+      const title = formData.projectTitle.trim();
+      const description = formData.description.trim();
+      const videoType = formData.videoType.trim();
+      const referenceUrl = formData.referenceUrl.trim();
+
+      if (!title || !description || !videoType) {
+        alert("Please fill project title, video type, and project description before proceeding.");
+        return;
+      }
+
       // 1️⃣ Build payload
       const payload = {
         gigId: gig.id,
         selectedPackage: pkg.name,
-        title: formData.projectTitle,
-        description: formData.description,
-        videoType: formData.videoType,
-        numberOfVideos: formData.numberOfVideos,
-        totalDuration: formData.totalDuration,
-        referenceUrl: formData.referenceUrl,
+        title,
+        description,
+        videoType,
+        numberOfVideos: Number(formData.numberOfVideos) || 1,
+        totalDuration: Number(formData.totalDuration) || 0,
         aspectRatio: formData.aspectRatio,
         addSubtitles: formData.addSubtitles,
         expressDelivery: formData.expressDelivery,
@@ -136,6 +201,10 @@ export default function ProjectBriefForm() {
         requirements: "Any specific requirements",
         customDetails: {},
       };
+
+      if (referenceUrl) {
+        payload.referenceUrl = referenceUrl;
+      }
   
       // 2️⃣ Make API request
       const res = await axiosInstance.post("/orders", payload);
@@ -145,7 +214,7 @@ export default function ProjectBriefForm() {
   
         // ✅ 3️⃣ Navigate to payment page with order info
         navigate(
-          `/checkout/${gigId}/${pkg.name}/payment`,
+          `/checkout/${gigId}/${pkg.name}/payment?orderId=${order.id}`,
           {
             state: {
               gig,
@@ -163,7 +232,7 @@ export default function ProjectBriefForm() {
       }
     } catch (error) {
       console.error("Order creation failed:", error);
-      alert("Failed to create order. Please try again.");
+      alert(error.response?.data?.message || "Failed to create order. Please try again.");
     }
   };
   
@@ -193,7 +262,7 @@ export default function ProjectBriefForm() {
 
                 <div>
                   <p className="text-sm text-gray-500">Price</p>
-                  <p className="text-2xl font-bold text-gray-900">{planDetails.price}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{planDetails.price}</p>
                 </div>
 
                 <div>
@@ -228,7 +297,7 @@ export default function ProjectBriefForm() {
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-gray-900">Total</span>
                     <span className="text-xl font-bold text-gray-900">
-                      ₹{Number.parseInt(planDetails.price.replace("₹", "")) + (formData.expressDelivery ? 500 : 0)}
+                      ₹{planDetails.price + (formData.expressDelivery ? 500 : 0)}
                     </span>
                   </div>
                 </div>

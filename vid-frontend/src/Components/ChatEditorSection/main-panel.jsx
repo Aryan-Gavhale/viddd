@@ -34,6 +34,21 @@ import axiosInstance from "../../utils/axios.js";
 import useAuth from "../../Hooks/useAuth.js";
 import { isSafeUrl } from "../../utils/safeUrl.js";
 
+function toNumberId(value) {
+  if (value == null || value === "") return null;
+  const id = Number(value);
+  return Number.isFinite(id) ? id : null;
+}
+
+function isOwnMessage(message, userId) {
+  const senderId =
+    toNumberId(message.senderId) ??
+    toNumberId(message.sender?.id) ??
+    toNumberId(message.sender_id) ??
+    toNumberId(message.userId);
+  return userId != null && senderId != null && senderId === userId;
+}
+
 export default function MainPanel({ currentProject, setCurrentProject }) {
   const user = useAuth();
   const [newMessage, setNewMessage] = useState("");
@@ -471,14 +486,14 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                 </div>
               )}
 
-              {messages.map((message) => (
+              {messages.map((message) => {
+                const mine = isOwnMessage(message, toNumberId(user?.id));
+                return (
                 <div
                   key={message.id}
-                  className={`flex items-start gap-3 ${
-                    message.sender?.id === user.id ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex w-full items-start gap-3 ${mine ? "justify-end" : "justify-start"}`}
                 >
-                  {message.sender?.id !== user.id && (
+                  {!mine && (
                     <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full overflow-hidden flex-shrink-0">
                       <img
                         src={message.sender?.avatar || "/placeholder.svg?height=40&width=40"}
@@ -492,7 +507,7 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                     className={`relative max-w-[85%] lg:max-w-[70%] rounded-2xl p-3 lg:p-4 ${
                       message.isPinned
                         ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 border border-blue-200 dark:border-blue-700 w-full"
-                        : message.sender?.id === user.id
+                        : mine
                           ? "bg-gradient-to-r from-green-400 to-green-600 text-white shadow-lg"
                           : "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-md border border-slate-200 dark:border-slate-600"
                     } ${message.sentiment === "negative" ? "border-l-4 border-yellow-500" : ""} group hover:shadow-lg transition-all duration-200`}
@@ -501,7 +516,7 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                     {message.replyTo && (
                       <div
                         className={`text-xs mb-2 pb-2 border-b ${
-                          message.sender?.id === user.id
+                          mine
                             ? "border-blue-300 text-blue-100"
                             : "border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400"
                         } flex items-center`}
@@ -550,7 +565,7 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                               {isAudio && safeUrl && <audio src={safeUrl} controls className="w-full" />}
                               <div
                                 className={`flex items-center justify-between p-2 text-xs ${
-                                  message.sender?.id === user.id ? "bg-blue-600" : "bg-slate-100 dark:bg-slate-600"
+                                  mine ? "bg-blue-600" : "bg-slate-100 dark:bg-slate-600"
                                 }`}
                               >
                                 <div className="flex items-center gap-2 truncate">
@@ -638,7 +653,7 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                           </div>
                         )}
                       </div>
-                      {message.sender?.id === user.id && !message.isDeleted && (
+                      {mine && !message.isDeleted && (
                         <button
                           onClick={() => handleDeleteMessage(message.id)}
                           className="p-1 rounded-full bg-black/10 hover:bg-red-500/20 transition-colors"
@@ -649,17 +664,9 @@ export default function MainPanel({ currentProject, setCurrentProject }) {
                     </div>
                   </div>
 
-                  {message.sender?.id === user.id && (
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full overflow-hidden flex-shrink-0">
-                      <img
-                        src={message.sender?.avatar || "/placeholder.svg?height=40&width=40"}
-                        alt={message.sender?.name || "Unknown"}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
                 </div>
-              ))}
+                );
+              })}
               <div ref={messagesEndRef} />
 
               {typingUsers.length > 0 && (

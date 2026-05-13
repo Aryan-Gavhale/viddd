@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectUser } from "../../redux/userSlice";
-import { useChat } from "../../hooks/useChat.js";
+import { useChat } from "../../Hooks/useChat.js";
 import { isSafeUrl } from "../../utils/safeUrl.js";
 import {
   Send,
@@ -68,6 +68,28 @@ function Avatar({ name, src, size = 32 }) {
       {initial}
     </div>
   );
+}
+
+function toNumberId(value) {
+  if (value == null || value === "") return null;
+  const id = Number(value);
+  return Number.isFinite(id) ? id : null;
+}
+
+function resolveSenderId(message) {
+  return (
+    toNumberId(message.senderId) ??
+    toNumberId(message.sender?.id) ??
+    toNumberId(message.sender_id) ??
+    toNumberId(message.userId) ??
+    toNumberId(message.user_id)
+  );
+}
+
+function isMineMessage(message, myId) {
+  if (message.status === "sending" && resolveSenderId(message) == null) return true;
+  const senderId = resolveSenderId(message);
+  return myId != null && senderId != null && senderId === myId;
 }
 
 /**
@@ -206,7 +228,7 @@ export default function ChatPanel({
   // strings (URL params, JSON edge cases) which made strict-equality lie about
   // whether a message belongs to the current user, so every bubble ended up on
   // the "peer" side. Using Number() once here is bullet-proof.
-  const myId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const myId = toNumberId(currentUser?.id);
   const error = chat.error || localError;
 
   return (
@@ -285,15 +307,7 @@ export default function ChatPanel({
           </div>
         ) : (
           chat.messages.map((message) => {
-            const senderIdNum =
-              message.sender?.id != null
-                ? Number(message.sender.id)
-                : message.senderId != null
-                ? Number(message.senderId)
-                : null;
-            const mine =
-              (myId != null && senderIdNum === myId) ||
-              (message.status === "sending" && senderIdNum == null);
+            const mine = isMineMessage(message, myId);
             const senderName = mine
               ? "You"
               : message.sender?.name ||
@@ -307,7 +321,7 @@ export default function ChatPanel({
             return (
               <div
                 key={message.clientId || message.id}
-                className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : "flex-row"}`}
+                className={`flex w-full items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}
               >
                 {!mine && (
                   <Avatar

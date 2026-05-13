@@ -4,11 +4,17 @@ import { ApiResponse } from "../Utils/ApiResponse.js";
 import { sql, sqlOne } from "../db.js";
 import logger from "../Utils/logger.js";
 import { getPresignedUrl } from "../Utils/s3.js";
+import { createOrUpdateMediaAsset, listMediaAssetsForProjectFiles } from "../Services/mediaAsset.service.js";
+import { areDevPlaceholdersAllowed } from "../Services/payment.service.js";
 
 type Handler = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => Promise<unknown>;
 
 const VALID_CATEGORIES = new Set(["raw", "reference", "deliverable", "final", "asset"]);
 const VALID_STATUSES = new Set(["PENDING_REVIEW", "APPROVED", "CHANGES_REQUESTED", "ARCHIVED"]);
+
+function isDevPlaceholderRef(value: string): boolean {
+  return value.startsWith("dev-placeholder") || value.startsWith("dev-placeholder://");
+}
 
 async function assertJobAccess(jobId: number, userId: number): Promise<DbRow> {
   const row = await sqlOne(
@@ -42,6 +48,9 @@ const listProjectFiles: Handler = async (req, res, next) => {
       [jobId]
     );
 
+    const mediaRows = await listMediaAssetsForProjectFiles(rows.map((r) => Number(r.id)));
+    const mediaByFile = new Map(mediaRows.map((m) => [Number(m.projectFileId), m]));
+
     const out = await Promise.all(
       rows.map(async (r) => {
         let url: string = String(r.url);
@@ -63,6 +72,7 @@ const listProjectFiles: Handler = async (req, res, next) => {
           version: Number(r.version) || 1,
           status: r.status,
           note: r.note,
+          media: mediaByFile.get(Number(r.id)) || null,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           uploader: r.uploaderId
@@ -102,6 +112,9 @@ const createProjectFile: Handler = async (req, res, next) => {
 
     if (!fileName) return next(new ApiError(400, "fileName is required"));
     if (!url) return next(new ApiError(400, "url is required (S3 key or absolute URL)"));
+    if (isDevPlaceholderRef(url) && !areDevPlaceholdersAllowed()) {
+      return next(new ApiError(400, "Development placeholder uploads are disabled"));
+    }
     if (!VALID_CATEGORIES.has(category)) return next(new ApiError(400, "Invalid category"));
 
     // Auto-bump version when a file with the same name exists
@@ -118,7 +131,22 @@ const createProjectFile: Handler = async (req, res, next) => {
       [jobId, userId, fileName, url, mimeType, size, category, version, note]
     );
 
-    return res.status(201).json(new ApiResponse(201, row, "File added"));
+    const media = String(mimeType || "").startsWith("video/")
+      ? await createOrUpdateMediaAsset({
+          sourceType: "PROJECT_FILE",
+          projectFileId: Number(row?.id),
+          ownerId: userId,
+          scopeType: "JOB",
+          jobId,
+          originalKey: url,
+          originalUrl: url,
+          mimeType,
+          fileSize: size,
+          metadata: { category, note },
+        })
+      : null;
+
+    return res.status(201).json(new ApiResponse(201, { ...(row as DbRow), media }, "File added"));
   } catch (e) {
     if (e instanceof ApiError) return next(e);
     logger.error(`createProjectFile: ${(e as Error).message}\n${(e as Error).stack}`);

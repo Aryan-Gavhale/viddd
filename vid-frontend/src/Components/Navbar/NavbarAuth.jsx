@@ -12,19 +12,23 @@ import {
   Bookmark,
   Heart,
   MessageSquare,
-  Calendar,
-  Shield,
   ChevronDown,
   Briefcase,
   XCircle,
+  CheckCheck,
+  Loader2,
+  Trash2,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
 
 const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [notificationSummary, setNotificationSummary] = useState({ unread: 0, total: 0, urgent: 0 });
   const [isLoading, setIsLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
   const profileDropdownRef = useRef(null);
   const notificationsRef = useRef(null);
 
@@ -41,14 +45,32 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const fetchNotificationSummary = async () => {
+    if (!user?.id) return;
+    try {
+      const response = await axiosInstance.get("/notifications/summary");
+      setNotificationSummary(response.data?.data || { unread: 0, total: 0, urgent: 0 });
+    } catch (error) {
+      console.error("Error fetching notification summary:", error);
+    }
+  };
+
   // Fetch notifications
   const fetchNotifications = async () => {
     try {
       setIsLoading(true);
+      setNotificationError("");
       const response = await axiosInstance.get("/notifications");
-      setNotifications(response.data.data.notifications);
+      const data = response.data?.data || {};
+      setNotifications(data.notifications || []);
+      setNotificationSummary((prev) => ({
+        ...prev,
+        unread: Number(data.unread ?? prev.unread ?? 0),
+        total: Number(data.total ?? prev.total ?? 0),
+      }));
     } catch (error) {
       console.error("Error fetching notifications:", error);
+      setNotificationError(error?.response?.data?.message || "Could not load notifications. Pull down to retry.");
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +80,14 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
     if (user?.id && isNotificationsOpen) {
       fetchNotifications();
     }
-  }, [user?.token, isNotificationsOpen]);
+  }, [user?.id, isNotificationsOpen]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    fetchNotificationSummary();
+    const interval = window.setInterval(fetchNotificationSummary, 45000);
+    return () => window.clearInterval(interval);
+  }, [user?.id]);
 
   const handleMarkAsRead = async (notificationId) => {
     try {
@@ -66,8 +95,13 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
       setNotifications(notifications.map(n => 
         n.id === notificationId ? { ...n, isRead: true } : n
       ));
+      setNotificationSummary((prev) => ({
+        ...prev,
+        unread: Math.max(0, Number(prev.unread || 0) - 1),
+      }));
     } catch (error) {
       console.error("Error marking notification as read:", error);
+      toast.error(error?.response?.data?.message || "Could not mark notification as read");
     }
   };
 
@@ -75,9 +109,45 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
     try {
       await axiosInstance.put("/notifications/read-all");
       setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+      setNotificationSummary((prev) => ({ ...prev, unread: 0, urgent: 0 }));
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
+      toast.error(error?.response?.data?.message || "Could not mark all as read");
     }
+  };
+
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      const target = notifications.find((n) => n.id === notificationId);
+      await axiosInstance.delete(`/notifications/${notificationId}`);
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      setNotificationSummary((prev) => ({
+        ...prev,
+        total: Math.max(0, Number(prev.total || 0) - 1),
+        unread: target && !target.isRead ? Math.max(0, Number(prev.unread || 0) - 1) : prev.unread,
+      }));
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      toast.error(error?.response?.data?.message || "Could not remove notification");
+    }
+  };
+
+  const unreadCount = Number(notificationSummary.unread || 0);
+
+  const notificationTitle = (notification) => {
+    if (notification.metadata?.title) return notification.metadata.title;
+    if (notification.entityType === "APPLICATION") return "Application update";
+    return String(notification.type || "SYSTEM").split("_").join(" ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+  };
+
+  const notificationHref = (notification) => {
+    const entityId = notification.entityId || notification.metadata?.entityId;
+    if (notification.entityType === "ORDER" && entityId) return `/orders/${entityId}`;
+    if (notification.entityType === "MESSAGE" && notification.metadata?.jobId) {
+      return `/workspace?jobId=${notification.metadata.jobId}`;
+    }
+    if (notification.entityType === "APPLICATION") return "/client/jobs";
+    return "/notifications";
   };
 
   // Define base menu sections
@@ -152,9 +222,9 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
               aria-label="Notifications"
             >
               <Bell className="w-6 h-6" />
-              {notifications.filter((n) => !n.isRead).length > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-gradient-to-r from-red-500 to-pink-500 rounded-full transform transition-transform duration-300 hover:scale-110">
-                  {notifications.filter((n) => !n.isRead).length}
+                  {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
@@ -167,28 +237,47 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
             >
               <div className="px-4 py-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-800">Notifications</h3>
-                  <button
-                    onClick={handleMarkAllAsRead}
-                    className="text-xs font-medium text-purple-600 hover:text-purple-800 cursor-pointer transition-colors"
-                  >
-                    Mark all as read
-                  </button>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Notifications</h3>
+                    <p className="text-xs text-gray-500">
+                      {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up"}
+                    </p>
+                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:text-purple-800 cursor-pointer transition-colors"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5" />
+                      Mark all read
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {isLoading ? (
                   <div className="px-4 py-6 text-center text-gray-500">
+                    <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-purple-500" />
                     <p>Loading notifications...</p>
+                  </div>
+                ) : notificationError ? (
+                  <div className="px-4 py-6 text-center">
+                    <p className="text-sm font-medium text-red-600">{notificationError}</p>
+                    <button
+                      type="button"
+                      onClick={fetchNotifications}
+                      className="mt-3 inline-flex items-center rounded-md bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100"
+                    >
+                      Retry
+                    </button>
                   </div>
                 ) : notifications.length > 0 ? (
                   notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`px-4 py-3 hover:bg-purple-50 transition-colors duration-200 border-l-4 ${
+                      className={`group px-4 py-3 hover:bg-purple-50 transition-colors duration-200 border-l-4 ${
                         notification.isRead ? "border-transparent" : "border-purple-500"
                       }`}
-                      onClick={() => !notification.isRead && handleMarkAsRead(notification.id)}
                     >
                       <div className="flex items-start">
                         <div className="flex-shrink-0 mr-3 mt-1 bg-gray-100 rounded-full p-2">
@@ -202,12 +291,19 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <p className={`text-sm font-medium ${
+                            <Link
+                              to={notificationHref(notification)}
+                              onClick={() => {
+                                setIsNotificationsOpen(false);
+                                if (!notification.isRead) handleMarkAsRead(notification.id);
+                              }}
+                              className={`text-sm font-medium hover:text-purple-700 ${
                               notification.entityType === "APPLICATION" ? "text-red-600" : 
                               notification.isRead ? "text-gray-700" : "text-gray-900"
-                            }`}>
-                              {notification.entityType === "APPLICATION" ? "Application Update" : notification.type.split("_").join(" ")}
-                            </p>
+                            }`}
+                            >
+                              {notificationTitle(notification)}
+                            </Link>
                             <span className="text-xs text-gray-500">
                               {notification.metadata?.rejectedAt 
                                 ? new Date(notification.metadata.rejectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -224,6 +320,23 @@ const NavbarAuth = ({ user, handleLogout, handleLinkClick }) => {
                               </span>
                             )}
                           </p>
+                          <div className="mt-2 flex items-center gap-2">
+                            {!notification.isRead && (
+                              <button
+                                onClick={() => handleMarkAsRead(notification.id)}
+                                className="text-[11px] font-medium text-purple-600 hover:text-purple-800"
+                              >
+                                Mark read
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteNotification(notification.id)}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Remove
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

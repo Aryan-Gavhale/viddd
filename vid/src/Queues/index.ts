@@ -1,13 +1,16 @@
 import Queue, { type QueueOptions } from "bull";
+import { createRequire } from "module";
 import logger from "../Utils/logger.js";
 
 const isDev = () => process.env.NODE_ENV !== "production";
+const require = createRequire(import.meta.url);
 
 let _queues: {
   emailQueue: Queue.Queue;
   notificationQueue: Queue.Queue;
   paymentQueue: Queue.Queue;
   fileCleanupQueue: Queue.Queue;
+  mediaQueue: Queue.Queue;
 } | null = null;
 
 function initQueues() {
@@ -69,6 +72,7 @@ function initQueues() {
     notificationQueue: createQueue("notifications"),
     paymentQueue: createQueue("payments"),
     fileCleanupQueue: createQueue("file-cleanup"),
+    mediaQueue: createQueue("media-pipeline"),
   };
 
   return _queues;
@@ -85,6 +89,9 @@ export const paymentQueue = new Proxy({} as Queue.Queue, {
 });
 export const fileCleanupQueue = new Proxy({} as Queue.Queue, {
   get(_, prop) { const q = initQueues().fileCleanupQueue; const v = (q as unknown as Record<string | symbol, unknown>)[prop]; return typeof v === "function" ? (v as Function).bind(q) : v; },
+});
+export const mediaQueue = new Proxy({} as Queue.Queue, {
+  get(_, prop) { const q = initQueues().mediaQueue; const v = (q as unknown as Record<string | symbol, unknown>)[prop]; return typeof v === "function" ? (v as Function).bind(q) : v; },
 });
 
 export { startProcessors } from "./processors.js";

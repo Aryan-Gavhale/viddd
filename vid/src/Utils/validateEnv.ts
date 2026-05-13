@@ -54,6 +54,16 @@ export function validateEnv(): void {
     console.warn("WARNING: STRIPE_WEBHOOK_SECRET is not set. Stripe webhooks will fail.");
   }
 
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_INLINE_WORKERS === "true" &&
+    process.env.DISABLE_WORKERS !== "true"
+  ) {
+    console.warn(
+      "WARNING: ENABLE_INLINE_WORKERS=true in production. The API process will run Bull processors and may duplicate jobs if a dedicated worker is also running."
+    );
+  }
+
   const missingRecommended = RECOMMENDED_ENV_VARS.filter((key) => !process.env[key]);
   if (missingRecommended.length > 0) {
     console.warn("WARNING: Missing recommended environment variables (some features may not work):");

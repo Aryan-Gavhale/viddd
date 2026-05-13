@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios";
-import { openChatWidget } from "../../hooks/useChat";
+import { openChatWidget } from "../../Hooks/useChat.js";
 import {
   XCircle,
   CheckCircle,

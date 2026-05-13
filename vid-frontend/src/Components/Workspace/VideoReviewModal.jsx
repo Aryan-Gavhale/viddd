@@ -92,6 +92,8 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
   const isClient = currentUser?.role === "CLIENT";
 
   const [versionStack, setVersionStack] = useState([]);
+  const [mediaState, setMediaState] = useState(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [statusBusy, setStatusBusy] = useState(false);
 
@@ -147,6 +149,27 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
       alive = false;
     };
   }, [open, file?.id, file?.fileName, jobId]);
+
+  useEffect(() => {
+    let alive = true;
+    setMediaState(null);
+    if (!open || !file?.id || !(file.mimeType || "").startsWith("video/")) return undefined;
+    setMediaLoading(true);
+    axiosInstance
+      .get(`/media/assets/${file.id}`)
+      .then((res) => {
+        if (alive) setMediaState(res.data?.data || null);
+      })
+      .catch(() => {
+        if (alive) setMediaState(null);
+      })
+      .finally(() => {
+        if (alive) setMediaLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, file?.id, file?.mimeType]);
 
   /* ────────────── load + realtime sync ────────────── */
   const reload = useCallback(async () => {
@@ -489,6 +512,13 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   const isVideo = (file.mimeType || "").startsWith("video/");
   const totalForBar = duration || 1;
+  const media = mediaState?.asset || file.media || null;
+  const mediaStatus = media?.status;
+  const mediaUrls = mediaState?.urls || {};
+  const playbackUrl = mediaUrls.watermarked?.url || mediaUrls.preview?.url || file.url;
+  const downloadUrl = mediaUrls.original?.url || file.url;
+  const mediaBlocked = ["FAILED", "QUARANTINED"].includes(mediaStatus);
+  const mediaPending = Boolean(mediaStatus && !["READY", "PLACEHOLDER"].includes(mediaStatus));
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col">
@@ -540,9 +570,9 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
           >
             <CopyIcon className="w-3.5 h-3.5" /> Copy link
           </button>
-          {file.url && (
+          {downloadUrl && !file.protectedReview && !mediaBlocked && (
             <a
-              href={file.url}
+              href={downloadUrl}
               download={file.fileName}
               className="px-2 py-1.5 rounded-md text-xs bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-1"
               title="Download the file"
@@ -595,10 +625,10 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
             <div className="flex-1 flex items-center justify-center text-gray-400 p-8">
               <div className="text-center">
                 <p className="mb-3">This file isn&apos;t a video — open it directly to review.</p>
-                {file.url && (
+                {downloadUrl && (
                   <a
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-white"
-                    href={file.url}
+                    href={downloadUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -609,15 +639,54 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
             </div>
           ) : (
             <>
+              {mediaStatus === "PLACEHOLDER" && (
+                <div className="border-b border-purple-700/40 bg-purple-900/30 px-4 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-purple-100">
+                  Workflow test file — no real video stored. Use only for exercising the review flow locally.
+                </div>
+              )}
               <div className="relative flex-1 flex items-center justify-center bg-black">
-                <video
-                  ref={videoRef}
-                  src={file.url}
-                  className="max-h-full max-w-full"
-                  controls={false}
-                  playsInline
-                  onClick={togglePlay}
-                />
+                {mediaLoading || mediaPending ? (
+                  <div className="max-w-md px-6 text-center text-white/70">
+                    <RefreshCcw className="mx-auto mb-3 h-8 w-8 animate-spin text-blue-300" />
+                    <p className="text-sm font-semibold text-white">Media is being prepared</p>
+                    <p className="mt-1 text-xs">Scanning, proxy creation, and watermarking can take a few minutes for large files.</p>
+                  </div>
+                ) : mediaBlocked ? (
+                  <div className="max-w-md px-6 text-center text-white/70">
+                    <AlertCircle className="mx-auto mb-3 h-8 w-8 text-red-300" />
+                    <p className="text-sm font-semibold text-white">Media is blocked</p>
+                    <p className="mt-1 text-xs">
+                      {mediaStatus === "QUARANTINED" ? "The file was quarantined by the scan pipeline." : "Processing failed. Ask the uploader to retry or upload a new file."}
+                    </p>
+                  </div>
+                ) : mediaStatus === "PLACEHOLDER" ? (
+                  <div className="max-w-md px-6 text-center text-white/70">
+                    <AlertCircle className="mx-auto mb-3 h-8 w-8 text-purple-300" />
+                    <p className="text-sm font-semibold text-white">No video bytes available</p>
+                    <p className="mt-1 text-xs">This is a workflow test record so the approval and delivery flows can be exercised. Upload a real video to play it back here.</p>
+                  </div>
+                ) : (
+                  <video
+                    ref={videoRef}
+                    src={playbackUrl}
+                    className="max-h-full max-w-full"
+                    controls={false}
+                    playsInline
+                    controlsList="nodownload noplaybackrate"
+                    disablePictureInPicture
+                    onContextMenu={(event) => event.preventDefault()}
+                    onClick={togglePlay}
+                  />
+                )}
+                {file.protectedReview && (
+                  <div className="pointer-events-none absolute inset-0 grid grid-cols-2 gap-8 p-8 opacity-30">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <span key={index} className="rotate-[-18deg] self-center text-center text-xs font-black uppercase tracking-widest text-white">
+                        VIDLANCING REVIEW
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <canvas
                   ref={drawCanvasRef}
                   onMouseDown={startStroke}

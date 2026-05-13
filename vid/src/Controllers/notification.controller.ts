@@ -117,7 +117,7 @@ const getNotifications: ControllerHandler = async (req, res, next) => {
     }
     const whereSql = whereParts.join(" AND ");
 
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unread] = await Promise.all([
       sql(
         `SELECT n.* FROM "Notification" n
          WHERE ${whereSql}
@@ -126,6 +126,14 @@ const getNotifications: ControllerHandler = async (req, res, next) => {
         [...params, lim, skip]
       ) as Promise<(NotificationRow & DbRow & { userId?: number; user?: unknown })[]>,
       sqlCount(`SELECT count(*)::int AS count FROM "Notification" n WHERE ${whereSql}`, params),
+      sqlCount(
+        `SELECT count(*)::int AS count
+         FROM "Notification" n
+         WHERE "user_id" = $1
+           AND "isRead" = false
+           AND ("expiresAt" >= now() OR "expiresAt" IS NULL)`,
+        [userId]
+      ),
     ]);
 
     const u = (await sqlOne(`SELECT firstname, lastname FROM "User" WHERE id = $1`, [
@@ -142,6 +150,7 @@ const getNotifications: ControllerHandler = async (req, res, next) => {
         {
           notifications,
           total,
+          unread,
           page: parseInt(page, 10),
           limit: lim,
           totalPages: Math.ceil(total / lim),
@@ -150,8 +159,68 @@ const getNotifications: ControllerHandler = async (req, res, next) => {
       )
     );
   } catch (error) {
-    logger.error("Error retrieving notifications: %s", (error as Error).message);
-    return next(new ApiError(500, "Failed to retrieve notifications"));
+    const e = error as Error;
+    logger.error(`Error retrieving notifications: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve notifications: ${e.message}`));
+  }
+};
+
+const getNotificationSummary: ControllerHandler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+    const userId = req.user.id;
+    const [counts, latest] = await Promise.all([
+      sqlOne(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE "isRead" = false)::int AS unread,
+           COUNT(*) FILTER (WHERE priority = 'HIGH'::"Priority" AND "isRead" = false)::int AS urgent
+         FROM "Notification"
+         WHERE "user_id" = $1
+           AND ("expiresAt" >= now() OR "expiresAt" IS NULL)`,
+        [userId]
+      ),
+      sql(
+        `SELECT *
+         FROM "Notification"
+         WHERE "user_id" = $1
+           AND ("expiresAt" >= now() OR "expiresAt" IS NULL)
+         ORDER BY priority DESC, "createdAt" DESC
+         LIMIT 5`,
+        [userId]
+      ),
+    ]);
+
+    const byTypeRows = await sql(
+      `SELECT type::text AS type, COUNT(*)::int AS count
+       FROM "Notification"
+       WHERE "user_id" = $1
+         AND ("expiresAt" >= now() OR "expiresAt" IS NULL)
+       GROUP BY type`,
+      [userId]
+    );
+    const byType: Record<string, number> = {};
+    for (const row of byTypeRows) byType[String(row.type)] = Number(row.count);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          total: Number(counts?.total || 0),
+          unread: Number(counts?.unread || 0),
+          urgent: Number(counts?.urgent || 0),
+          byType,
+          latest,
+        },
+        "Notification summary"
+      )
+    );
+  } catch (error) {
+    const e = error as Error;
+    logger.error(`Error retrieving notification summary: ${e.message}\n${e.stack}`);
+    return next(new ApiError(500, `Failed to retrieve notification summary: ${e.message}`));
   }
 };
 
@@ -169,10 +238,6 @@ const markNotificationAsRead: ControllerHandler = async (req, res, next) => {
     if (!notification || notification.user_id !== userId) {
       return next(new ApiError(404, "Notification not found or you don't own it"));
     }
-    if (notification.isRead) {
-      return next(new ApiError(400, "Notification is already marked as read"));
-    }
-
     const updatedNotification = (await sqlOne(
       `UPDATE "Notification"
        SET "isRead" = true, "readAt" = now()
@@ -229,7 +294,9 @@ const markAllNotificationsAsRead: ControllerHandler = async (req, res, next) => 
     const unreadCount = await sqlCount(
       `SELECT count(*)::int AS count
        FROM "Notification" n
-       WHERE n."user_id" = $1 AND n."isRead" = false AND n."expiresAt" >= now()`,
+       WHERE n."user_id" = $1
+         AND n."isRead" = false
+         AND (n."expiresAt" >= now() OR n."expiresAt" IS NULL)`,
       [userId]
     );
     if (unreadCount === 0) {
@@ -241,7 +308,7 @@ const markAllNotificationsAsRead: ControllerHandler = async (req, res, next) => 
        SET "isRead" = true, "readAt" = now()
        WHERE "user_id" = $1
          AND "isRead" = false
-         AND "expiresAt" >= now()`,
+         AND ("expiresAt" >= now() OR "expiresAt" IS NULL)`,
       [userId]
     );
 
@@ -254,10 +321,33 @@ const markAllNotificationsAsRead: ControllerHandler = async (req, res, next) => 
   }
 };
 
+const deleteReadNotifications: ControllerHandler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+    const result = await sql(
+      `DELETE FROM "Notification"
+       WHERE "user_id" = $1 AND "isRead" = true
+       RETURNING id`,
+      [req.user.id]
+    );
+    return res
+      .status(200)
+      .json(new ApiResponse(200, { deleted: result.length }, "Read notifications cleared"));
+  } catch (error) {
+    const e = error as Error;
+    logger.error(`Error clearing read notifications: ${e.message}`);
+    return next(new ApiError(500, `Failed to clear read notifications: ${e.message}`));
+  }
+};
+
 export {
   createNotification,
   getNotifications,
+  getNotificationSummary,
   markNotificationAsRead,
   deleteNotification,
   markAllNotificationsAsRead,
+  deleteReadNotifications,
 };

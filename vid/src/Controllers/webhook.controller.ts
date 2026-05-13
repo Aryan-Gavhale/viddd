@@ -40,6 +40,10 @@ export const handleStripeWebhook: Handler = async (req, res, next) => {
       return res.status(400).json({ error: "Webhook signature verification failed" });
     }
 
+    // Idempotency MUST hold for Stripe webhooks. If the WebhookEvent table is
+    // unreachable we cannot guarantee a duplicate event won't release escrow,
+    // refund twice, or double-credit a freelancer. Return 503 so Stripe
+    // retries with backoff instead of silently processing without protection.
     let idempotencyEnabled = true;
     try {
       const inserted = await pool.query(
@@ -53,12 +57,22 @@ export const handleStripeWebhook: Handler = async (req, res, next) => {
         return res.status(200).json({ message: "Already processed" });
       }
     } catch (e) {
-      idempotencyEnabled = false;
-      logger.warn("WebhookEvent idempotency table unavailable, processing without guard: %s", (e as Error).message);
+      logger.error(
+        "WebhookEvent idempotency store unavailable, refusing to process %s (%s): %s — Stripe will retry.",
+        event.id,
+        event.type,
+        (e as Error).message
+      );
+      return res
+        .status(503)
+        .json({ error: "Idempotency store unavailable, please retry" });
     }
 
     try {
       switch (event.type) {
+        case "checkout.session.completed":
+          await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+          break;
         case "payment_intent.succeeded":
           await handlePaymentSucceeded(event.data.object as Stripe.PaymentIntent);
           break;
@@ -119,16 +133,7 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     },
   };
 
-  await withTransaction(async (client) => {
-    await client.query(
-      `UPDATE "Transaction" SET "status" = 'COMPLETED'::"TransactionStatus" WHERE "id" = $1`,
-      [transaction.id]
-    );
-    await client.query(
-      `UPDATE "Order" SET "escrowStatus" = 'HELD', "updatedAt" = $1 WHERE "id" = $2 AND "deletedAt" IS NULL`,
-      [new Date(), transaction.orderId]
-    );
-  });
+  await markPaymentSuccessful(transaction.id, transaction.orderId, transaction.userId, paymentIntent.id);
 
   await queueNotification({
     userId: transaction.order.clientId,
@@ -139,6 +144,70 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   }).catch(() => {});
 
   logger.info("Payment succeeded for order %d, escrow HELD", transaction.orderId);
+}
+
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+  const found = (await sqlOne(
+    `SELECT t.*, o."id" AS "order_id_ref", o."orderNumber" AS "orderNumber", o."client_id" AS "orderClientId"
+       FROM "Transaction" t
+       INNER JOIN "Order" o ON t."order_id" = o."id"
+      WHERE t."paymentGatewayId" = $1 AND o."deletedAt" IS NULL`,
+    [session.id]
+  )) as DbRow | null;
+  if (!found) {
+    logger.warn("No transaction found for checkout session %s", session.id);
+    return;
+  }
+
+  const orderId = (found.order_id as number) ?? (found.orderId as number);
+  const userId = (found.user_id as number) ?? (found.userId as number);
+  await markPaymentSuccessful(found.id as number, orderId, userId, paymentIntentId || null);
+
+  await queueNotification({
+    userId: found.orderClientId as number,
+    type: "PAYMENT",
+    content: `Payment for order #${String(found.orderNumber)} was successful. Funds are held in escrow.`,
+    entityType: "Order",
+    entityId: orderId,
+  }).catch(() => {});
+
+  logger.info("Checkout session completed for order %d", orderId);
+}
+
+async function markPaymentSuccessful(transactionId: number, orderId: number, userId: number, paymentIntentId?: string | null) {
+  const now = new Date();
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE "Transaction"
+          SET "status" = 'COMPLETED'::"TransactionStatus",
+              "paymentIntentId" = COALESCE($2, "paymentIntentId"),
+              "metadata" = COALESCE("metadata", '{}'::jsonb) || $3::jsonb
+        WHERE "id" = $1`,
+      [transactionId, paymentIntentId || null, JSON.stringify({ webhookConfirmedAt: now.toISOString() })]
+    );
+    const updated = await client.query(
+      `UPDATE "Order"
+          SET "status" = CASE WHEN "status" = 'PENDING'::"OrderStatus" THEN 'CURRENT'::"OrderStatus" ELSE "status" END,
+              "escrowStatus" = 'HELD',
+              "progress" = GREATEST(COALESCE("progress", 0), 5),
+              "updatedAt" = $1,
+              "lastNotifiedAt" = $1
+        WHERE "id" = $2 AND "deletedAt" IS NULL
+        RETURNING "status"`,
+      [now, orderId]
+    );
+    if (updated.rowCount) {
+      await client.query(
+        `INSERT INTO "OrderStatusHistory" ("order_id", "status", "changed_by")
+         SELECT $1, 'CURRENT'::"OrderStatus", $2
+         WHERE NOT EXISTS (
+           SELECT 1 FROM "OrderStatusHistory" WHERE "order_id" = $1 AND "status" = 'CURRENT'
+         )`,
+        [orderId, userId]
+      );
+    }
+  });
 }
 
 async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {

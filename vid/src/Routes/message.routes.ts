@@ -39,6 +39,11 @@ const getMessagesSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const getJobMessagesQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(50),
+});
+
 const sendJobMessageSchema = Joi.object({
   content: Joi.string().allow("").max(5000).optional(),
   attachments: Joi.array().items(Joi.object().unknown(true)).max(20).optional(),
@@ -52,7 +57,7 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.post("/", { preHandler: [...auth, uploadMultiple("attachments", 5), validateBody(sendMessageSchema)], handler: wrapHandler(sendMessage) });
   fastify.post("/job/:jobId", { preHandler: [...auth, validateBody(sendJobMessageSchema)], handler: wrapHandler(sendJobMessage) });
   fastify.get("/", { preHandler: [...auth, validateQuery(getMessagesSchema)], handler: wrapHandler(getMessages) });
-  fastify.get("/job/:jobId", { preHandler: auth, handler: wrapHandler(getMessagesByJobId) });
+  fastify.get("/job/:jobId", { preHandler: [...auth, validateQuery(getJobMessagesQuerySchema)], handler: wrapHandler(getMessagesByJobId) });
   fastify.put("/:messageId/read", { preHandler: auth, handler: wrapHandler(markMessageAsRead) });
   fastify.delete("/:messageId", { preHandler: auth, handler: wrapHandler(deleteMessage) });
   fastify.post("/:messageId/flag", { preHandler: [...auth, validateBody(flagMessageSchema)], handler: wrapHandler(flagMessage) });

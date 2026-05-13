@@ -6,6 +6,8 @@ import {
   getReview,
   getFreelancerReviews,
   respondToReview,
+  getCloseoutReviewState,
+  submitCloseoutReview,
 } from "../Controllers/review.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { restrictTo } from "../Middlewares/restrict.middleware.js";
@@ -32,6 +34,16 @@ const respondReviewSchema = Joi.object({
   response: Joi.string().required(),
 });
 
+const closeoutReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).required(),
+  criteriaRatings: Joi.object().pattern(Joi.string().max(80), Joi.number().integer().min(1).max(5)).default({}),
+  tags: Joi.array().items(Joi.string().trim().max(80)).max(12).default([]),
+  publicComment: Joi.string().trim().max(3000).allow("").optional(),
+  comment: Joi.string().trim().max(3000).allow("").optional(),
+  privateNote: Joi.string().trim().max(3000).allow("").optional(),
+  wouldWorkAgain: Joi.boolean().default(true),
+});
+
 const getReviewsSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
@@ -44,6 +56,14 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.get("/freelancer/:freelancerId", {
     preHandler: [validateQuery(getReviewsSchema)],
     handler: wrapHandler(getFreelancerReviews),
+  });
+  fastify.get("/closeout/:scopeType/:scopeId", {
+    preHandler: auth,
+    handler: wrapHandler(getCloseoutReviewState),
+  });
+  fastify.post("/closeout/:scopeType/:scopeId", {
+    preHandler: [...auth, validateBody(closeoutReviewSchema)],
+    handler: wrapHandler(submitCloseoutReview),
   });
   fastify.get("/:reviewId", { handler: wrapHandler(getReview) });
 

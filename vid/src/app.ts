@@ -12,11 +12,29 @@ import winstonLogger from "./Utils/logger.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function buildApp(opts: Record<string, unknown> = {}) {
+  // Trust proxy: when running behind an LB / reverse proxy (Nginx, Cloudflare,
+  // ELB, Render, Fly, etc.) we need Fastify to honour X-Forwarded-* so
+  // `request.ip` is the real client IP rather than the proxy hop. Configure
+  // via TRUST_PROXY:
+  //   - "true" / "false"     → enable/disable
+  //   - integer (e.g. "1")   → number of proxy hops to trust
+  //   - "loopback,127.0.0.1" → comma-separated list of trusted addresses
+  //     (or CIDRs) passed straight to Fastify.
+  const trustProxyEnv = (process.env.TRUST_PROXY || "").trim();
+  let trustProxy: boolean | number | string = false;
+  if (trustProxyEnv) {
+    if (/^(true|1)$/i.test(trustProxyEnv)) trustProxy = true;
+    else if (/^(false|0)$/i.test(trustProxyEnv)) trustProxy = false;
+    else if (/^\d+$/.test(trustProxyEnv)) trustProxy = Number(trustProxyEnv);
+    else trustProxy = trustProxyEnv;
+  }
+
   // FIX M2: disable Fastify's built-in pino — Winston is the single logging pipeline.
   // Request-level logging is added below as an onResponse hook.
   const app = Fastify({
     logger: false,
     bodyLimit: 1 * 1024 * 1024,
+    trustProxy,
     ...opts,
   });
 
@@ -151,7 +169,14 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const rateLimitOpts: Parameters<typeof rateLimit>[0] = {
     max: 100,
     timeWindow: "1 minute",
-    keyGenerator: (request: FastifyRequest) => `ip:${request.ip}`,
+    // Prefer authenticated user id over raw IP so a single bad actor can't
+    // be drowned out behind a NAT/CGNAT/Cloudflare exit IP. Falls back to the
+    // (now proxy-aware) request.ip when the user has not authenticated yet.
+    keyGenerator: (request: FastifyRequest) => {
+      const u = (request as FastifyRequest & { user?: { id?: number } }).user;
+      if (u && typeof u.id === "number") return `user:${u.id}`;
+      return `ip:${request.ip}`;
+    },
   };
   const redisUrl = process.env.REDIS_URL;
   let rateLimitRedis: InstanceType<typeof Redis> | null = null;
@@ -231,6 +256,7 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const { default: reviewRoutes } = await import("./Routes/review.routes.js");
   const { default: messageRoutes } = await import("./Routes/message.routes.js");
   const { default: notificationRoutes } = await import("./Routes/notification.routes.js");
+  const { default: savedItemRoutes } = await import("./Routes/savedItem.routes.js");
   const { default: disputeRoutes } = await import("./Routes/dispute.routes.js");
   const { default: searchRoutes } = await import("./Routes/search.routes.js");
   const { default: adminRoutes } = await import("./Routes/admin.routes.js");
@@ -264,8 +290,10 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const { default: contractRoutes } = await import("./Routes/contract.routes.js");
   const { default: fileManagerRoutes } = await import("./Routes/fileManager.routes.js");
   const { default: thumbnailRoutes } = await import("./Routes/thumbnail.routes.js");
+  const { default: mediaRoutes } = await import("./Routes/media.routes.js");
   const { default: emailVerificationRoutes } = await import("./Routes/emailVerification.routes.js");
   const { default: workspaceRoutes } = await import("./Routes/workspace.routes.js");
+  const { default: deliveryRoutes } = await import("./Routes/delivery.routes.js");
 
   // ── Auth & Identity ──
   await app.register(userRoutes, { prefix: "/api/v1/users" });
@@ -276,12 +304,14 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   await app.register(freelancerRoutes, { prefix: "/api/v1/freelancers" });
   await app.register(gigRoutes, { prefix: "/api/v1/gigs" });
   await app.register(jobRoutes, { prefix: "/api/v1/jobs" });
+  await app.register(savedItemRoutes, { prefix: "/api/v1/saved-items" });
   await app.register(workspaceRoutes, { prefix: "/api/v1/workspace" });
   await app.register(applicationRoutes, { prefix: "/api/v1/applications" });
   await app.register(orderRoutes, { prefix: "/api/v1/orders" });
   await app.register(milestoneRoutes, { prefix: "/api/v1/milestones" });
   await app.register(transactionRoutes, { prefix: "/api/v1/transactions" });
   await app.register(escrowRoutes, { prefix: "/api/v1/escrow" });
+  await app.register(deliveryRoutes, { prefix: "/api/v1/deliveries" });
 
   // ── Messaging & Notifications ──
   await app.register(messageRoutes, { prefix: "/api/v1/messages" });
@@ -295,6 +325,7 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   await app.register(portfolioRoutes, { prefix: "/api/v1/portfolios" });
   await app.register(demoReelRoutes, { prefix: "/api/v1/demo-reels" });
   await app.register(thumbnailRoutes, { prefix: "/api/v1/thumbnails" });
+  await app.register(mediaRoutes, { prefix: "/api/v1/media" });
   // Video Review (Frame.io-style) is now scoped under workspace at:
   //   /api/v1/workspace/projects/:jobId/files/:fileId/review/...
 

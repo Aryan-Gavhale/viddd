@@ -5,6 +5,7 @@ import { hashPassword, comparePasswords } from "../Services/authService.js";
 import {
   generateAccessToken,
   generateRefreshToken,
+  isRefreshStoreUnavailable,
   rotateRefreshToken,
   revokeRefreshFamily,
   tokenTtl,
@@ -97,12 +98,22 @@ function accessCookieMaxAge(): number {
 async function issueAuthCookies(res: ExpressResponse, user: AuthUser | DbRow): Promise<void> {
   const r = res as ReplyWithCookies;
   const accessToken = generateAccessToken(user);
-  const { token: refreshToken, ttlSeconds } = await generateRefreshToken(user);
+  let refreshIssued: { token: string; ttlSeconds: number };
+  try {
+    const { token, ttlSeconds } = await generateRefreshToken(user);
+    refreshIssued = { token, ttlSeconds };
+  } catch (e) {
+    if (isRefreshStoreUnavailable(e)) {
+      // Fail closed in production: don't issue a refresh token we can't track.
+      throw new ApiError(503, "Authentication store temporarily unavailable. Please try again shortly.");
+    }
+    throw e;
+  }
   const csrfToken = crypto.randomBytes(32).toString("hex");
 
   r.setCookie("access_token", accessToken, { ...ACCESS_COOKIE_BASE, maxAge: accessCookieMaxAge() });
-  r.setCookie("refresh_token", refreshToken, { ...REFRESH_COOKIE_BASE, maxAge: ttlSeconds });
-  r.setCookie("csrf_token", csrfToken, { ...CSRF_COOKIE_BASE, maxAge: ttlSeconds });
+  r.setCookie("refresh_token", refreshIssued.token, { ...REFRESH_COOKIE_BASE, maxAge: refreshIssued.ttlSeconds });
+  r.setCookie("csrf_token", csrfToken, { ...CSRF_COOKIE_BASE, maxAge: refreshIssued.ttlSeconds });
 }
 
 function clearAuthCookies(res: ExpressResponse): void {

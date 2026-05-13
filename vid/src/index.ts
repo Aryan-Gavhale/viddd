@@ -29,10 +29,30 @@ const startServer = async (): Promise<void> => {
     } catch (e) {
       logger.warn("Socket.IO init failed (non-fatal): %s", (e as Error).message);
     }
-    try {
-      startProcessors();
-    } catch (e) {
-      logger.warn("Bull processors init failed (non-fatal): %s", (e as Error).message);
+
+    // Worker separation: in production the API process must NOT run Bull
+    // processors. Set ENABLE_INLINE_WORKERS=true to opt in (single-process
+    // dev), otherwise run a dedicated `worker.ts` process and leave
+    // DISABLE_WORKERS=true on the API. In production with neither flag set we
+    // skip processors and log a clear startup message so duplicate execution
+    // can never happen by accident.
+    const isProd = process.env.NODE_ENV === "production";
+    const inlineOptIn = process.env.ENABLE_INLINE_WORKERS === "true";
+    const disabledExplicit = process.env.DISABLE_WORKERS === "true";
+    const shouldStartInline = !disabledExplicit && (!isProd || inlineOptIn);
+    if (shouldStartInline) {
+      try {
+        startProcessors();
+      } catch (e) {
+        logger.warn("Bull processors init failed (non-fatal): %s", (e as Error).message);
+      }
+    } else {
+      logger.info(
+        "Bull processors NOT started in API process (isProd=%s, inlineOptIn=%s, disabledExplicit=%s). Run a dedicated worker.",
+        isProd,
+        inlineOptIn,
+        disabledExplicit
+      );
     }
 
     logger.info(`Fastify server running on port ${PORT} [${process.env.NODE_ENV || "development"}]`);

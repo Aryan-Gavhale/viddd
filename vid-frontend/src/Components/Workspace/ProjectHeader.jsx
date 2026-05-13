@@ -140,7 +140,7 @@ function QuickActionsMenu({ role, status, onAction, loading }) {
 
   const actions = [];
   if (isClient && active) {
-    actions.push({ id: "complete", label: "Mark Complete", icon: CheckCircle2, tone: "emerald" });
+    actions.push({ id: "request_review", label: "Open Delivery Review", icon: CheckCircle2, tone: "emerald" });
     actions.push({ id: "pause", label: "Pause Project", icon: PauseCircle });
     actions.push({ id: "cancel", label: "Cancel Project", icon: X, tone: "rose" });
   }

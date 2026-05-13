@@ -22,6 +22,24 @@ function qp(q: Record<string, string | string[] | undefined>, key: string, def: 
   return Array.isArray(v) ? (v[0] ?? def) : v;
 }
 
+// Hard cap on per-page rows for any history endpoint. Stops a malicious or
+// buggy client from asking for `limit=999999` and force-loading the full
+// message history into memory.
+const MAX_PAGE_LIMIT = 100;
+const DEFAULT_PAGE_LIMIT = 50;
+
+function clampLimit(raw: string, fallback = DEFAULT_PAGE_LIMIT, cap = MAX_PAGE_LIMIT): number {
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, cap);
+}
+
+function clampPage(raw: string): number {
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return parsed;
+}
+
 const messageReadWhere = `m."deletedAt" IS NULL AND (NOT COALESCE(m."isDeleted", false))`;
 
 function uniqueInts(ids: unknown[]): number[] {
@@ -825,10 +843,9 @@ const getMessagesByJobId: ControllerHandler = async (req, res, next) => {
     }
     const userId = req.user.id;
     const { jobId } = req.params;
-    const page = qp(req.query, "page", "1");
-    const limit = qp(req.query, "limit", "50");
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const lim = parseInt(limit, 10);
+    const pageNum = clampPage(qp(req.query, "page", "1"));
+    const lim = clampLimit(qp(req.query, "limit", String(DEFAULT_PAGE_LIMIT)));
+    const skip = (pageNum - 1) * lim;
 
     const job = await sqlOne(
       `SELECT j.id, j."posted_by_id" AS "postedById", j."freelancer_id" AS "freelancerId"
@@ -892,7 +909,7 @@ const getMessagesByJobId: ControllerHandler = async (req, res, next) => {
         {
           messages,
           total,
-          page: parseInt(page, 10),
+          page: pageNum,
           limit: lim,
           totalPages: Math.ceil(total / lim),
         },
@@ -913,10 +930,9 @@ const getMessagesByOrderId: ControllerHandler = async (req, res, next) => {
     }
     const userId = req.user.id;
     const { orderId } = req.params;
-    const page = qp(req.query, "page", "1");
-    const limit = qp(req.query, "limit", "50");
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const lim = parseInt(limit, 10);
+    const pageNum = clampPage(qp(req.query, "page", "1"));
+    const lim = clampLimit(qp(req.query, "limit", String(DEFAULT_PAGE_LIMIT)));
+    const skip = (pageNum - 1) * lim;
 
     const order = await sqlOne(
       `SELECT o.*, fp."user_id" AS "freelancerUserId"
@@ -982,7 +998,7 @@ const getMessagesByOrderId: ControllerHandler = async (req, res, next) => {
         {
           messages,
           total,
-          page: parseInt(page, 10),
+          page: pageNum,
           limit: lim,
           totalPages: Math.ceil(total / lim),
         },

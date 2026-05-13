@@ -3,9 +3,11 @@ import { wrapHandler } from "../Utils/wrapHandler.js";
 import {
   createNotification,
   getNotifications,
+  getNotificationSummary,
   markNotificationAsRead,
   deleteNotification,
   markAllNotificationsAsRead,
+  deleteReadNotifications,
 } from "../Controllers/notification.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
@@ -38,6 +40,18 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
     preHandler: [authenticateToken, validateQuery(getNotificationsSchema)],
     handler: wrapHandler(getNotifications),
   });
+  fastify.get("/summary", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(getNotificationSummary),
+  });
+  fastify.put("/read-all", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(markAllNotificationsAsRead),
+  });
+  fastify.delete("/read", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(deleteReadNotifications),
+  });
   fastify.put("/:notificationId/read", {
     preHandler: [authenticateToken],
     handler: wrapHandler(markNotificationAsRead),
@@ -45,9 +59,5 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.delete("/:notificationId", {
     preHandler: [authenticateToken],
     handler: wrapHandler(deleteNotification),
-  });
-  fastify.put("/read-all", {
-    preHandler: [authenticateToken],
-    handler: wrapHandler(markAllNotificationsAsRead),
   });
 }

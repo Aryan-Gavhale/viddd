@@ -176,8 +176,9 @@ export default function GigPage() {
                           <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                         ))}
                       </div>
-                      <span className="text-lg font-bold text-black">4.8</span>
-                      <span className="text-black">(954 reviews)</span>
+                      <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        Sample preview — real ratings will appear here
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -429,7 +430,9 @@ export default function GigPage() {
 
               <div className="grid md:grid-cols-2 gap-8 mb-8">
                 <div>
-                  <p className="text-black mb-6 text-lg">954 reviews for this Gig</p>
+                  <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+                    Sample preview — real review counts will appear here once gig reviews are wired up.
+                  </p>
                   <div className="space-y-3">
                     {[5, 4, 3, 2, 1].map((stars) => (
                       <div key={stars} className="flex items-center gap-4">

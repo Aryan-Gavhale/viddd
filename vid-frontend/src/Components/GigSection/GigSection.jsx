@@ -143,6 +143,18 @@ export default function PremiumMarketplace() {
         const gigResponse = await axiosInstance.get("/gigs/all");
         const fetchedGigs = gigResponse.data.data.gigs;
 
+        let savedLookup = { GIG: new Set(), FREELANCER: new Set() };
+        try {
+          const savedRes = await axiosInstance.get("/saved-items", { params: { limit: 50 } });
+          const savedItems = savedRes.data?.data?.items || [];
+          savedLookup = {
+            GIG: new Set(savedItems.filter((s) => s.entityType === "GIG").map((s) => Number(s.entityId))),
+            FREELANCER: new Set(savedItems.filter((s) => s.entityType === "FREELANCER").map((s) => Number(s.entityId))),
+          };
+        } catch {
+          // Anonymous users can still browse; they will be asked to log in when saving.
+        }
+
         const formattedGigs = fetchedGigs.map((gig) => ({
           id: gig.id,
           title: gig.title,
@@ -153,12 +165,15 @@ export default function PremiumMarketplace() {
             gig.sampleMedia.find((media) => media.mediaType === "thumbnail")?.mediaUrl ||
             "/placeholder.svg?height=400&width=600",
           category: gig.category || "uncategorized",
-          rating: gig.rating || 4.9,
-          reviews: gig.reviews || Math.floor(Math.random() * 1000),
-          price: gig.pricing[0]?.price || 1999,
+          // Real values come from the gig payload; default to neutral
+          // placeholders (no rating, 0 reviews) instead of random demo numbers
+          // so customers don't see fabricated review counts.
+          rating: typeof gig.rating === "number" ? gig.rating : 0,
+          reviews: typeof gig.reviews === "number" ? gig.reviews : 0,
+          price: gig.pricing[0]?.price || 0,
           deliveryTime: `${gig.deliveryTime || 1} ${gig.deliveryTime === 1 ? "minute" : "minutes"}`,
-          isFavorite: false,
-          offersConsultation: Math.random() > 0.7,
+          isFavorite: savedLookup.GIG.has(Number(gig.id)),
+          offersConsultation: Boolean(gig.offersConsultation),
         }));
         setGigs(formattedGigs);
 
@@ -177,8 +192,8 @@ export default function PremiumMarketplace() {
           id: editor.id,
           name: editor.name || "Unnamed Freelancer",
           specialty: editor.jobTitle || editor.skills[0] || "Video Editing",
-          rating: editor.rating || (editor.hourlyRate ? Math.min(editor.hourlyRate / 20, 5) : 4.5),
-          reviews: editor.gigs?.length || 0,
+          rating: typeof editor.rating === "number" ? editor.rating : 0,
+          reviews: typeof editor.reviewCount === "number" ? editor.reviewCount : 0,
           hourlyRate: editor.hourlyRate || 50,
           image: editor.profilePicture || "/placeholder.svg?height=400&width=400",
           level: editor.experienceLevel
@@ -195,7 +210,7 @@ export default function PremiumMarketplace() {
                 UNAVAILABLE: "Currently Unavailable",
               }[editor.availabilityStatus]
             : "Available Now",
-          isFavorite: false,
+          isFavorite: savedLookup.FREELANCER.has(Number(editor.id)),
           category: editor.skills[0]?.toLowerCase().replace(/\s+/g, "_") || "all",
         }));
 
@@ -356,18 +371,27 @@ export default function PremiumMarketplace() {
     try {
       if (type === "gig") {
         const gig = gigs.find((g) => g.id === id);
-        await axiosInstance.post(`/gigs/${id}/favorite`, { isFavorite: !gig.isFavorite });
+        if (gig.isFavorite) {
+          await axiosInstance.delete(`/saved-items/GIG/${id}`);
+        } else {
+          await axiosInstance.post("/saved-items", { entityType: "GIG", entityId: id });
+        }
         setGigs(gigs.map((gig) => (gig.id === id ? { ...gig, isFavorite: !gig.isFavorite } : gig)));
         toast.success(`Gig ${gig.isFavorite ? "removed from" : "added to"} favorites`);
       } else {
         const editor = editors.find((e) => e.id === id);
-        await axiosInstance.post(`/editors/${id}/favorite`, { isFavorite: !editor.isFavorite });
+        if (editor.isFavorite) {
+          await axiosInstance.delete(`/saved-items/FREELANCER/${id}`);
+        } else {
+          await axiosInstance.post("/saved-items", { entityType: "FREELANCER", entityId: id });
+        }
         setEditors(editors.map((editor) => (editor.id === id ? { ...editor, isFavorite: !editor.isFavorite } : editor)));
         toast.success(`Editor ${editor.isFavorite ? "removed from" : "added to"} favorites`);
       }
+      window.dispatchEvent(new CustomEvent("saved-items:changed"));
     } catch (error) {
       console.error("Error toggling favorite:", error);
-      toast.error("Failed to update favorite status");
+      toast.error(error.response?.status === 401 ? "Please log in to save items" : "Failed to update favorite status");
     }
   };
 
@@ -774,9 +798,15 @@ export default function PremiumMarketplace() {
                   </h3>
 
                   <div className="flex items-center gap-1 mb-3">
-                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    <span className="font-medium text-xs text-slate-800">{gig.rating.toFixed(1)}</span>
-                    <span className="text-xs text-slate-500">({gig.reviews})</span>
+                    <Star className={`w-3.5 h-3.5 ${gig.reviews > 0 ? "text-amber-400 fill-amber-400" : "text-slate-300"}`} />
+                    {gig.reviews > 0 ? (
+                      <>
+                        <span className="font-medium text-xs text-slate-800">{Number(gig.rating).toFixed(1)}</span>
+                        <span className="text-xs text-slate-500">({gig.reviews})</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-500">No reviews yet</span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
@@ -846,9 +876,15 @@ export default function PremiumMarketplace() {
                       <p className="text-sm text-slate-600 mb-1">{editor.specialty}</p>
 
                       <div className="flex items-center gap-1 mb-2">
-                        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                        <span className="font-medium text-xs text-slate-800">{editor.rating.toFixed(1)}</span>
-                        <span className="text-xs text-slate-500">({editor.reviews})</span>
+                        <Star className={`w-3.5 h-3.5 ${editor.reviews > 0 ? "text-amber-400 fill-amber-400" : "text-slate-300"}`} />
+                        {editor.reviews > 0 ? (
+                          <>
+                            <span className="font-medium text-xs text-slate-800">{Number(editor.rating).toFixed(1)}</span>
+                            <span className="text-xs text-slate-500">({editor.reviews})</span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-500">No reviews yet</span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5">
