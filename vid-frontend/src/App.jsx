@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { selectUser } from './redux/userSlice';
 import Navbar from './Components/Navbar/Navbar';
@@ -76,7 +76,18 @@ const GanttTimeline = lazy(() => import('./Components/ProjectTimeline/GanttTimel
 const ProjectBriefForm = lazy(() => import('./Components/GigSection/Project-brief- form'));
 const GigPaymentPage = lazy(() => import('./Components/GigSection/Payment-page'));
 const CheckoutSuccessPage = lazy(() => import('./Components/GigSection/CheckoutSuccessPage'));
-const GigOrderWorkspace = lazy(() => import('./Components/Workspace/GigOrderWorkspace'));
+
+/**
+ * Tiny shim that pulls `:orderId` out of the URL and redirects into the
+ * unified WorkspaceShell at `/workspace?orderId=…`. We keep it here (rather
+ * than inline) so the legacy `/orders/:orderId/...` deep-links from emails
+ * and notifications continue to work — they'll land on the shared workspace
+ * with the right scope preselected.
+ */
+function RedirectOrderToWorkspace({ basePath = "/workspace" }) {
+  const { orderId } = useParams();
+  return <Navigate to={`${basePath}?orderId=${orderId}`} replace />;
+}
 
 // Editor / Freelancer
 const VideoEditorDashboard = lazy(() => import('./Components/EditorDashboard/editorDashboard'));
@@ -246,9 +257,15 @@ function NavbarPage() {
             <Route path="/team-proposals" element={<ProtectedRoute><PageSuspense><PageTitle title="Team Proposals" /><TeamProposalBuilder /></PageSuspense></ProtectedRoute>} />
             <Route path="/team-proposals/:jobId" element={<ProtectedRoute><PageSuspense><PageTitle title="Team Proposals" /><TeamProposalBuilder /></PageSuspense></ProtectedRoute>} />
 
-            {/* Order-scoped resources */}
-            <Route path="/orders/:orderId" element={<ProtectedRoute><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
-            <Route path="/orders/:orderId/details" element={<ProtectedRoute><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
+            {/* Order-scoped resources.
+                /orders/:orderId and /orders/:orderId/details now redirect into
+                the unified WorkspaceShell so gig orders and custom jobs share
+                a single shell. The deep links to specialised tools (the file
+                manager and revision tracker) keep their dedicated pages for
+                now since they predate the workspace and still get linked from
+                emails / notifications. */}
+            <Route path="/orders/:orderId" element={<ProtectedRoute><RedirectOrderToWorkspace /></ProtectedRoute>} />
+            <Route path="/orders/:orderId/details" element={<ProtectedRoute><RedirectOrderToWorkspace /></ProtectedRoute>} />
             <Route path="/orders/:orderId/files" element={<ProtectedRoute><PageSuspense><PageTitle title="Project Files" /><ProjectFileManager /></PageSuspense></ProtectedRoute>} />
             <Route path="/orders/:orderId/revisions" element={<ProtectedRoute><PageSuspense><PageTitle title="Revision Tracker" /><RevisionTracker /></PageSuspense></ProtectedRoute>} />
             <Route path="/projects/:jobId/timeline" element={<ProtectedRoute><PageSuspense><PageTitle title="Project Timeline" /><GanttTimeline /></PageSuspense></ProtectedRoute>} />
@@ -264,7 +281,7 @@ function NavbarPage() {
             <Route path="/editor/dashboard" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="Editor Dashboard" /><VideoEditorDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/payments" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Payment Details" /><EditorPaymentDetails /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/workspace" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Workspace" /><WorkspaceShell /></PageSuspense></ProtectedRoute>} />
-            <Route path="/editor/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
+            <Route path="/editor/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><RedirectOrderToWorkspace basePath="/editor/workspace" /></ProtectedRoute>} />
             <Route path="/editor/gigs" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="My Gigs" /><GigDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/gigs/new" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Create Gig" /><CreateGigForm /></PageSuspense></ProtectedRoute>} />
             <Route path="/editor/gigs/:gigId/edit" element={<ProtectedRoute allowedRoles={["FREELANCER"]}><PageSuspense><PageTitle title="Update Gig" /><CreateGigForm isUpdate={true} /></PageSuspense></ProtectedRoute>} />
@@ -282,7 +299,7 @@ function NavbarPage() {
             <Route path="/client/dashboard" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense skeleton={<SkeletonDashboard />}><PageTitle title="Client Dashboard" /><ClientDashboard /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/profile" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Client Profile" /><ClientProfile /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/workspace" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Workspace" /><WorkspaceShell /></PageSuspense></ProtectedRoute>} />
-            <Route path="/client/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Gig Workspace" /><GigOrderWorkspace /></PageSuspense></ProtectedRoute>} />
+            <Route path="/client/workspace/orders/:orderId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><RedirectOrderToWorkspace basePath="/client/workspace" /></ProtectedRoute>} />
             <Route path="/client/jobs" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="My Jobs" /><ClientJobs /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/jobs/new" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Post a Job" /><JobPosting /></PageSuspense></ProtectedRoute>} />
             <Route path="/client/jobs/:jobId/shortlist" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PageSuspense><PageTitle title="Shortlist" /><Shortlist /></PageSuspense></ProtectedRoute>} />

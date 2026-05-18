@@ -468,7 +468,7 @@ export default function VideoEditorDashboard() {
                           <div className="mt-4 flex justify-end">
                             <button
                               type="button"
-                              onClick={() => navigate(`/orders/${order.id}`)}
+                              onClick={() => navigate(`/editor/workspace?orderId=${order.id}`)}
                               className={`${
                                 darkMode
                                   ? "text-purple-400 hover:text-purple-300"

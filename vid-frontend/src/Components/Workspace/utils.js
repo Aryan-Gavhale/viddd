@@ -3,6 +3,37 @@
  * Keeping them local keeps the components focused and easy to test.
  */
 
+/**
+ * Pick the right `/workspace/...` API base for the given scope. Job-scoped
+ * data lives under `/workspace/projects/:jobId`, order-scoped under
+ * `/workspace/orders/:orderId`. Centralising this keeps FilesTab, ChatRail,
+ * and VideoReviewModal from re-implementing the branch in three places.
+ */
+export function workspaceApiBase(scope) {
+  if (!scope || !scope.id) return null;
+  if (scope.kind === "ORDER") return `/workspace/orders/${scope.id}`;
+  return `/workspace/projects/${scope.id}`;
+}
+
+/**
+ * Higher-level helpers a few callers use directly. Returns null if the scope
+ * isn't sufficiently specified yet (sidebar still loading, etc).
+ */
+export function workspaceFilesUrl(scope) {
+  const base = workspaceApiBase(scope);
+  return base ? `${base}/files` : null;
+}
+
+export function workspacePinnedUrl(scope) {
+  const base = workspaceApiBase(scope);
+  return base ? `${base}/pinned` : null;
+}
+
+export function workspaceReviewUrl(scope, fileId) {
+  const base = workspaceApiBase(scope);
+  return base ? `${base}/files/${fileId}/review` : null;
+}
+
 const STATUS_LABELS = {
   OPEN: "Open",
   PENDING: "Pending",
@@ -181,4 +212,35 @@ export function avatarColor(seed) {
   let hash = 0;
   for (let i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) | 0;
   return palette[Math.abs(hash) % palette.length];
+}
+
+/**
+ * Single source of truth for chat bubble theming. The current user's bubble
+ * ("mine") is always indigo so the eye instantly anchors to "your voice"; peer
+ * bubbles are themed by role so editors and clients are visually distinct
+ * across the app. Both `ChatPanel` (job, real-time) and `OrderMessagePanel`
+ * (order, polling) consume this so the styling stays in sync.
+ *
+ * @param {{ mine: boolean, role?: "client" | "freelancer" | string }} args
+ * @returns {string} Tailwind classes to apply to the bubble container.
+ */
+export function bubbleClass({ mine, role }) {
+  if (mine) {
+    return "bg-indigo-600 text-white rounded-br-sm border border-indigo-700/40 shadow-sm";
+  }
+  if (role === "freelancer") {
+    return "bg-emerald-50 border border-emerald-200 text-emerald-900 dark:bg-emerald-900/30 dark:border-emerald-700/50 dark:text-emerald-100 rounded-bl-sm";
+  }
+  return "bg-sky-50 border border-sky-200 text-sky-900 dark:bg-sky-900/30 dark:border-sky-700/50 dark:text-sky-100 rounded-bl-sm";
+}
+
+/**
+ * Human-readable label for chat captions ("You", "Editor", "Client").
+ * Used above message bubbles to make role distinctions explicit.
+ */
+export function roleCaption({ mine, role }) {
+  if (mine) return "You";
+  if (role === "freelancer") return "Editor";
+  if (role === "client") return "Client";
+  return "User";
 }

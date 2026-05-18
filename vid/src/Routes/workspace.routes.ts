@@ -6,6 +6,9 @@ import {
   getWorkspaceSummary,
   markJobMessagesRead,
   updateProjectStatus,
+  getOrderWorkspaceSummary,
+  markOrderMessagesRead,
+  updateOrderWorkspaceStatus,
 } from "../Controllers/workspace.controller.js";
 import {
   listProjectFiles,
@@ -30,6 +33,7 @@ export default async function workspaceRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
 ): Promise<void> {
+  // ── Job-scoped routes (custom-job side of the workspace) ─────────────────
   // Sidebar list + center summary
   fastify.get("/projects", { preHandler: auth, handler: wrapHandler(getMyWorkspaceProjects) });
   fastify.get("/projects/:jobId", { preHandler: auth, handler: wrapHandler(getWorkspaceSummary) });
@@ -47,19 +51,52 @@ export default async function workspaceRoutes(
   fastify.post("/projects/:jobId/pinned", { preHandler: auth, handler: wrapHandler(togglePin) });
 
   // Video Review — Frame.io-style timecoded comments + drawings (USP)
-  const reviewBase = "/projects/:jobId/files/:fileId/review";
-  fastify.get(`${reviewBase}/summary`, { preHandler: auth, handler: wrapHandler(reviewSummary) });
-  fastify.get(`${reviewBase}/comments`, { preHandler: auth, handler: wrapHandler(listComments) });
-  fastify.post(`${reviewBase}/comments`, { preHandler: auth, handler: wrapHandler(addComment) });
-  fastify.patch(`${reviewBase}/comments/:commentId`, {
+  const jobReviewBase = "/projects/:jobId/files/:fileId/review";
+  fastify.get(`${jobReviewBase}/summary`, { preHandler: auth, handler: wrapHandler(reviewSummary) });
+  fastify.get(`${jobReviewBase}/comments`, { preHandler: auth, handler: wrapHandler(listComments) });
+  fastify.post(`${jobReviewBase}/comments`, { preHandler: auth, handler: wrapHandler(addComment) });
+  fastify.patch(`${jobReviewBase}/comments/:commentId`, {
     preHandler: auth,
     handler: wrapHandler(editComment),
   });
-  fastify.post(`${reviewBase}/comments/:commentId/resolve`, {
+  fastify.post(`${jobReviewBase}/comments/:commentId/resolve`, {
     preHandler: auth,
     handler: wrapHandler(setResolved),
   });
-  fastify.delete(`${reviewBase}/comments/:commentId`, {
+  fastify.delete(`${jobReviewBase}/comments/:commentId`, {
+    preHandler: auth,
+    handler: wrapHandler(deleteComment),
+  });
+
+  // ── Order-scoped routes (gig-order side of the workspace) ────────────────
+  // Mirror the job set so the unified WorkspaceShell can switch endpoints
+  // based on the selected project's `kind`. The same controllers are reused
+  // and pick up `req.params.orderId` automatically.
+  fastify.get("/orders/:orderId", { preHandler: auth, handler: wrapHandler(getOrderWorkspaceSummary) });
+  fastify.post("/orders/:orderId/read", { preHandler: auth, handler: wrapHandler(markOrderMessagesRead) });
+  fastify.post("/orders/:orderId/status", { preHandler: auth, handler: wrapHandler(updateOrderWorkspaceStatus) });
+
+  fastify.get("/orders/:orderId/files", { preHandler: auth, handler: wrapHandler(listProjectFiles) });
+  fastify.post("/orders/:orderId/files", { preHandler: auth, handler: wrapHandler(createProjectFile) });
+  fastify.patch("/orders/:orderId/files/:fileId", { preHandler: auth, handler: wrapHandler(setFileStatus) });
+  fastify.delete("/orders/:orderId/files/:fileId", { preHandler: auth, handler: wrapHandler(deleteProjectFile) });
+
+  fastify.get("/orders/:orderId/pinned", { preHandler: auth, handler: wrapHandler(listPinned) });
+  fastify.post("/orders/:orderId/pinned", { preHandler: auth, handler: wrapHandler(togglePin) });
+
+  const orderReviewBase = "/orders/:orderId/files/:fileId/review";
+  fastify.get(`${orderReviewBase}/summary`, { preHandler: auth, handler: wrapHandler(reviewSummary) });
+  fastify.get(`${orderReviewBase}/comments`, { preHandler: auth, handler: wrapHandler(listComments) });
+  fastify.post(`${orderReviewBase}/comments`, { preHandler: auth, handler: wrapHandler(addComment) });
+  fastify.patch(`${orderReviewBase}/comments/:commentId`, {
+    preHandler: auth,
+    handler: wrapHandler(editComment),
+  });
+  fastify.post(`${orderReviewBase}/comments/:commentId/resolve`, {
+    preHandler: auth,
+    handler: wrapHandler(setResolved),
+  });
+  fastify.delete(`${orderReviewBase}/comments/:commentId`, {
     preHandler: auth,
     handler: wrapHandler(deleteComment),
   });

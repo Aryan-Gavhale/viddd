@@ -6,6 +6,7 @@ import logger from "../Utils/logger.js";
 import { parseCursorPagination } from "../Utils/pagination.js";
 import { cursorPaginatedResponse } from "../Utils/dto.js";
 import { cacheGet, cacheSet, cacheDel } from "../Utils/cache.js";
+import { isFreelancerProfileComplete } from "../Utils/profileUtils.js";
 
 type SampleMedia = { mediaUrl: string; mediaType: string };
 
@@ -113,6 +114,34 @@ const createGig = async (req, res, next) => {
       );
       if (!freelancerProfile) {
         return next(new ApiError(404, "Freelancer profile not found. Create a profile first."));
+      }
+
+      // Block publishing a Gig while onboarding is incomplete. We treat the
+      // FreelancerProfile fields as the source of truth (city, state,
+      // jobTitle, overview, skills, availability) and also self-heal the
+      // User.isProfileComplete flag so it converges with reality. Drafts go
+      // through createGigDraft and intentionally skip this gate so a
+      // half-finished freelancer can still save work-in-progress.
+      const fpRow = freelancerProfile as DbRow;
+      const { user_id: _fpUserId, ...fpRest } = fpRow;
+      const profileComplete = isFreelancerProfileComplete({ ...fpRest, userId: _fpUserId } as never);
+      if (!profileComplete) {
+        return next(
+          new ApiError(
+            403,
+            "Complete your freelancer profile (city, state, job title, overview, skills, availability) before publishing a gig. You can still save it as a draft."
+          )
+        );
+      }
+      // Self-heal flag drift so future calls (and the frontend's
+      // protectedRoutes redirect) see the right state without needing a
+      // manual refresh.
+      const userRow = await sqlOne(`SELECT "isProfileComplete" FROM "User" WHERE "id" = $1`, [freelancerUserId]);
+      if (userRow && (userRow as DbRow).isProfileComplete !== true) {
+        await sql(
+          `UPDATE "User" SET "isProfileComplete" = true, "updatedAt" = NOW() WHERE "id" = $1`,
+          [freelancerUserId]
+        );
       }
 
       const sampleMediaData = buildSampleMediaFromS3(req.files);

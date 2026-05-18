@@ -172,9 +172,12 @@ const sendJobMessage: ControllerHandler = async (req, res, next) => {
     const formatted = {
       id: inserted.id,
       jobId: inserted.jobId,
-      senderId,
+      // Always emit `senderId` as a Number so frontend isMine checks don't
+      // flip-flop between string and number depending on which DB row shape
+      // they receive (websocket vs HTTP optimistic-confirm).
+      senderId: Number(senderId),
       sender: {
-        id: senderId,
+        id: Number(senderId),
         firstname: sender?.firstname,
         lastname: sender?.lastname,
         name: `${sender?.firstname || ""} ${sender?.lastname || ""}`.trim(),
@@ -381,24 +384,30 @@ const sendMessage: ControllerHandler = async (req, res, next) => {
 
     // Broadcast to socket room so real-time clients get the message
     const io = getIO();
+    // Always include a numeric `senderId` on the wire payload — frontend
+    // chat alignment (mine-vs-peer) keys off this and not just `sender.id`.
+    const senderName = `${sender?.firstname ?? ""} ${sender?.lastname ?? ""}`.trim();
+    const ts = message.timestamp ? new Date(message.timestamp as string | number | Date).toISOString() : new Date().toISOString();
     if (io && jobIdVal) {
       io.to(ROOMS.job(jobIdVal)).emit(EVENTS.NEW_MESSAGE, {
         id: message.id,
         jobId: message.jobId,
-        sender: { id: senderId, name: `${sender?.firstname ?? ""} ${sender?.lastname ?? ""}`.trim(), avatar: null },
+        senderId: Number(senderId),
+        sender: { id: Number(senderId), name: senderName, avatar: null },
         content: message.content,
         attachments: message.attachments,
         replyTo: message.replyTo,
-        timestamp: message.timestamp ? new Date(message.timestamp as string | number | Date).toISOString() : new Date().toISOString(),
+        timestamp: ts,
       });
     }
     if (io) {
       io.to(ROOMS.user(receiverInt)).emit(EVENTS.NEW_MESSAGE, {
         id: message.id,
         jobId: message.jobId,
-        sender: { id: senderId, name: `${sender?.firstname ?? ""} ${sender?.lastname ?? ""}`.trim(), avatar: null },
+        senderId: Number(senderId),
+        sender: { id: Number(senderId), name: senderName, avatar: null },
         content: message.content,
-        timestamp: message.timestamp ? new Date(message.timestamp as string | number | Date).toISOString() : new Date().toISOString(),
+        timestamp: ts,
       });
     }
 

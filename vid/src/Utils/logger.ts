@@ -4,6 +4,12 @@ const isProd = process.env.NODE_ENV === "production";
 
 const logger = winston.createLogger({
   level: isProd ? "info" : "debug",
+  // exitOnError=false: Winston's exception/rejection handlers default to
+  // calling process.exit(1) after logging. A flaky Redis or other transient
+  // background promise rejection should not kill the API process; we'd
+  // rather log it and keep serving requests. uncaughtException is still
+  // re-thrown via the safety net below if we can't recover.
+  exitOnError: false,
   format: winston.format.combine(
     winston.format.errors({ stack: true }),
     winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),

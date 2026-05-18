@@ -58,12 +58,14 @@ export default function ReviewPage() {
 
   const backTo = useMemo(() => {
     if (!scopeId) return "/";
-    // ORDER scope opens at `/orders/:orderId` (registered in App.jsx) and JOB
-    // scope opens at `/workspace?jobId=...` (the WorkspaceShell route). The
-    // older `/orders/:id/workspace` and `/workspace/projects/:id` paths were
-    // never registered as routes, which made the "Back to delivery" link 404
-    // for both roles. Use the same patterns as NavbarAuth notifications.
-    return scopeType === "ORDER" ? `/orders/${scopeId}` : `/workspace?jobId=${scopeId}`;
+    // Both scopes now route into the unified WorkspaceShell. ORDER becomes
+    // `/workspace?orderId=…`, JOB becomes `/workspace?jobId=…`. The legacy
+    // `/orders/:id` URL still works through a redirect in App.jsx, but new
+    // links should target the canonical workspace path directly so we don't
+    // bounce twice.
+    return scopeType === "ORDER"
+      ? `/workspace?orderId=${scopeId}`
+      : `/workspace?jobId=${scopeId}`;
   }, [scopeId, scopeType]);
 
   const toggleTag = (tag) => {

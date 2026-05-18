@@ -3,6 +3,7 @@ import { useSelector } from "react-redux";
 import { selectUser } from "../../redux/userSlice";
 import { useChat } from "../../Hooks/useChat.js";
 import { isSafeUrl } from "../../utils/safeUrl.js";
+import { bubbleClass, roleCaption } from "../Workspace/utils.js";
 import {
   Send,
   Paperclip,
@@ -82,7 +83,9 @@ function resolveSenderId(message) {
     toNumberId(message.sender?.id) ??
     toNumberId(message.sender_id) ??
     toNumberId(message.userId) ??
-    toNumberId(message.user_id)
+    toNumberId(message.user_id) ??
+    toNumberId(message.from) ??
+    toNumberId(message.author?.id)
   );
 }
 
@@ -106,12 +109,17 @@ function isMineMessage(message, myId) {
 export default function ChatPanel({
   jobId,
   peer,
+  role,
   compact = false,
   hideHeader = false,
   onClose,
   onMinimize,
 }) {
   const currentUser = useSelector(selectUser);
+  // Bubble theming uses the peer's role: editor peers get an emerald wash,
+  // client peers get sky. We prefer `peer.kind` (set by the workspace
+  // controller) and only fall back to inverting the caller's role.
+  const peerRole = peer?.kind || (role === "client" ? "freelancer" : role === "freelancer" ? "client" : undefined);
   const chat = useChat(jobId);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState([]);
@@ -317,19 +325,24 @@ export default function ChatPanel({
             const replyParent = message.replyTo ? messageById.get(message.replyTo) : null;
             const isSending = message.status === "sending";
             const isFailed = message.status === "failed";
+            // `role` here is the bubble role used for theming: my own bubble
+            // uses my caller-role, the peer bubble uses peerRole. That keeps
+            // editors emerald and clients sky regardless of who's sending.
+            const bubbleRole = mine ? role : peerRole;
+            const myAvatarName =
+              currentUser?.firstname || currentUser?.name || "You";
+            const myAvatarSrc = currentUser?.profilePicture || currentUser?.avatar;
 
             return (
               <div
                 key={message.clientId || message.id}
-                className={`flex w-full items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}
+                className={`flex w-full items-end gap-2 ${mine ? "flex-row-reverse" : "flex-row"}`}
               >
-                {!mine && (
-                  <Avatar
-                    name={message.sender?.firstname || message.sender?.name || senderName}
-                    src={senderAvatar}
-                    size={compact ? 24 : 30}
-                  />
-                )}
+                <Avatar
+                  name={mine ? myAvatarName : message.sender?.firstname || message.sender?.name || senderName}
+                  src={mine ? myAvatarSrc : senderAvatar}
+                  size={compact ? 24 : 30}
+                />
 
                 <div className={`max-w-[78%] relative group ${mine ? "items-end" : "items-start"} flex flex-col`}>
                   {replyParent && (
@@ -343,22 +356,31 @@ export default function ChatPanel({
                     </div>
                   )}
 
-                  {!mine && !compact && (
-                    <span className="text-[10px] font-semibold text-gray-500 mb-0.5 px-1">
-                      {senderName}
+                  {!compact && (
+                    <span
+                      className={`text-[10px] font-semibold uppercase tracking-wide mb-0.5 px-1 ${
+                        mine
+                          ? "text-indigo-500 dark:text-indigo-300"
+                          : bubbleRole === "freelancer"
+                          ? "text-emerald-600 dark:text-emerald-300"
+                          : "text-sky-600 dark:text-sky-300"
+                      }`}
+                    >
+                      {roleCaption({ mine, role: bubbleRole })}
+                      {!mine && senderName ? (
+                        <span className="ml-1.5 normal-case font-medium text-gray-500 dark:text-gray-400">
+                          · {senderName}
+                        </span>
+                      ) : null}
                     </span>
                   )}
                   <div
-                    className={`${mine ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-bl-md"} ${
-                      compact ? "px-3 py-1.5" : "px-4 py-2"
-                    } shadow-sm ${
-                      mine
-                        ? isFailed
-                          ? "bg-red-500/90 text-white"
-                          : isSending
-                          ? "bg-blue-400 text-white"
-                          : "bg-blue-600 text-white"
-                        : "bg-white text-gray-900 border border-gray-200 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                    className={`${compact ? "px-3 py-1.5" : "px-4 py-2"} ${
+                      mine && isFailed
+                        ? "rounded-2xl rounded-br-md bg-red-500/90 text-white shadow-sm"
+                        : mine && isSending
+                        ? "rounded-2xl rounded-br-md bg-indigo-400/90 text-white shadow-sm"
+                        : `rounded-2xl ${bubbleClass({ mine, role: bubbleRole })}`
                     }`}
                   >
                     <p

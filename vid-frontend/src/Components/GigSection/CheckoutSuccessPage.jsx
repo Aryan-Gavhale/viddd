@@ -38,8 +38,11 @@ export default function CheckoutSuccessPage() {
     };
   }, [order, orderId]);
 
+  // Land the buyer in the unified workspace with the order pre-selected.
+  // Custom jobs and gig orders share the same shell now, so this is the
+  // single canonical destination for "open my new purchase".
   const workspaceUrl = useMemo(
-    () => (orderId ? `/client/workspace/orders/${orderId}` : "/client/workspace"),
+    () => (orderId ? `/client/workspace?orderId=${orderId}` : "/client/workspace"),
     [orderId]
   );
 

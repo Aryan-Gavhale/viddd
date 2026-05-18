@@ -60,16 +60,26 @@ function createResProxy(reply: FastifyReply, onSend?: () => void): ExpressRespon
 }
 
 /**
+ * Express-compatible handler that may return any value (resolves Handler vs
+ * ExpressHandler return-type mismatches without weakening request typing).
+ */
+type LooseExpressHandler = (
+  req: ExpressRequest,
+  res: ExpressResponse,
+  next: NextFunction
+) => unknown | Promise<unknown>;
+
+/**
  * Wraps an Express route handler (req, res, next) for Fastify.
  * Controllers need ZERO changes.
  */
-export function wrapHandler(handler: ExpressHandler) {
+export function wrapHandler(handler: LooseExpressHandler | ExpressHandler) {
   return async function fastifyHandler(request: FastifyRequest, reply: FastifyReply) {
     const next: NextFunction = (err) => {
       if (err) throw err;
     };
     const res = createResProxy(reply);
-    return handler(request as ExpressRequest, res, next);
+    return (handler as LooseExpressHandler)(request as ExpressRequest, res, next);
   };
 }
 

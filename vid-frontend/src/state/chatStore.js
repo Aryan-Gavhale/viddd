@@ -101,6 +101,25 @@ function patchConversation(jobId, patch) {
  * Replace a pending optimistic message with the server's authoritative copy.
  * Returns true when a placeholder was found and replaced.
  */
+function normalizeServerMessage(server, optimistic) {
+  // Ensure the merged row carries a numeric senderId. Some socket payloads
+  // ship only `sender.id`; if so, hoist it. Falls back to the optimistic row's
+  // senderId so we never lose the alignment cue mid-flight.
+  const candidates = [
+    server?.senderId,
+    server?.sender?.id,
+    server?.sender_id,
+    optimistic?.senderId,
+  ];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n)) {
+      return { ...server, senderId: n };
+    }
+  }
+  return { ...server };
+}
+
 function reconcileMessage(jobId, clientId, serverMessage) {
   const c = getConversation(jobId);
   let replaced = false;
@@ -108,7 +127,8 @@ function reconcileMessage(jobId, clientId, serverMessage) {
     if (replaced) return m;
     if (clientId && m.clientId === clientId) {
       replaced = true;
-      return { ...serverMessage, clientId, status: "sent" };
+      const normalized = normalizeServerMessage(serverMessage, m);
+      return { ...normalized, clientId, status: "sent" };
     }
     return m;
   });
@@ -119,19 +139,21 @@ function reconcileMessage(jobId, clientId, serverMessage) {
       if (replaced) return m;
       if (
         m.status === "sending" &&
-        m.senderId === serverMessage.senderId &&
+        Number(m.senderId) === Number(serverMessage.senderId ?? serverMessage.sender?.id) &&
         (m.content || "") === (serverMessage.content || "") &&
         new Date(m.timestamp || 0).getTime() >= recent
       ) {
         replaced = true;
-        return { ...serverMessage, clientId: m.clientId, status: "sent" };
+        const normalized = normalizeServerMessage(serverMessage, m);
+        return { ...normalized, clientId: m.clientId, status: "sent" };
       }
       return m;
     });
   }
   if (!replaced) {
     if (!c.messages.some((m) => m.id === serverMessage.id)) {
-      c.messages = [...c.messages, { ...serverMessage, status: "sent" }];
+      const normalized = normalizeServerMessage(serverMessage, null);
+      c.messages = [...c.messages, { ...normalized, status: "sent" }];
     }
   }
   return replaced;
@@ -524,14 +546,19 @@ export const chatStore = {
 
     const clientId = generateClientId();
     const now = new Date().toISOString();
+    // Coerce senderId to a Number so the chat panel's mine-vs-peer check
+    // never has to compare a string to a number. The optimistic row gets
+    // merged with the server-confirmed copy on `MESSAGE_SENT` — both sides
+    // need to agree on type.
+    const numericSenderId = sender?.id != null ? Number(sender.id) : null;
     const optimistic = {
       id: clientId,
       clientId,
       jobId: id,
-      senderId: sender?.id ?? null,
+      senderId: Number.isFinite(numericSenderId) ? numericSenderId : null,
       sender: sender
         ? {
-            id: sender.id,
+            id: Number.isFinite(numericSenderId) ? numericSenderId : sender.id,
             firstname: sender.firstname,
             lastname: sender.lastname,
             avatar: sender.profilePicture || sender.avatar || null,

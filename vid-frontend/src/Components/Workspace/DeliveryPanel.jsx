@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
+  AlertCircle,
   CheckCircle2,
   Clock,
   Download,
@@ -55,9 +56,11 @@ export function DeliveryPanel({
   scopeId,
   role: fallbackRole,
   availableFiles = [],
+  openReviewCount = 0,
   dark = false,
   onChanged,
 }) {
+  const reviewBlocked = Number(openReviewCount) > 0;
   const [state, setState] = useState(null);
   const [reviewState, setReviewState] = useState(null);
   const [files, setFiles] = useState(availableFiles);
@@ -264,6 +267,12 @@ export function DeliveryPanel({
   const deliverMaster = async (event) => {
     event.preventDefault();
     if (!latest?.id || selectedMasterFiles.length === 0) return;
+    if (reviewBlocked) {
+      toast.error(
+        `Resolve all ${openReviewCount} open review comment${openReviewCount === 1 ? "" : "s"} before delivering the final master.`
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       await axiosInstance.post(`/deliveries/${latest.id}/deliver-master`, {
@@ -302,6 +311,19 @@ export function DeliveryPanel({
                 Final Delivery
               </h2>
               <DeliveryBadge status={latest?.status || "WORKING"} dark={dark} />
+              {reviewBlocked && (
+                <span
+                  className={
+                    dark
+                      ? "inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-amber-900/40 text-amber-200"
+                      : "inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                  }
+                  title="Final master delivery is blocked while review comments are still open."
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {openReviewCount} open comment{openReviewCount === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
             <p className={dark ? "mt-2 text-sm text-slate-400" : "mt-2 text-sm text-gray-500 dark:text-gray-400"}>
               Final delivery unlocks only after the client approves a review cut in Files. Then the editor uploads the downloadable full-resolution master here.
@@ -384,11 +406,16 @@ export function DeliveryPanel({
 
           <button
             type="submit"
-            disabled={submitting || selectedMasterFiles.length === 0 || selectedMasterBlocked}
+            disabled={submitting || selectedMasterFiles.length === 0 || selectedMasterBlocked || reviewBlocked}
+            title={
+              reviewBlocked
+                ? `Resolve all ${openReviewCount} open review comment${openReviewCount === 1 ? "" : "s"} first`
+                : undefined
+            }
             className={buttonClass(dark, "success")}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            Deliver final master and close
+            {reviewBlocked ? "Resolve comments first" : "Deliver final master and close"}
           </button>
         </form>
       )}

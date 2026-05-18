@@ -8,6 +8,7 @@ import {
   Trash2,
   Loader2,
   Pencil,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios.js";
@@ -25,12 +26,13 @@ function statusFor(item) {
   return "PENDING";
 }
 
-export function MilestonesTab({ jobId, role, onChanged }) {
+export function MilestonesTab({ jobId, role, openReviewCount = 0, onChanged }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const reviewBlocked = Number(openReviewCount) > 0;
 
   const fetchItems = async () => {
     setLoading(true);
@@ -80,6 +82,12 @@ export function MilestonesTab({ jobId, role, onChanged }) {
   };
 
   const handleStatusChange = async (item, newStatus) => {
+    if (newStatus === "COMPLETED" && reviewBlocked) {
+      toast.error(
+        `Resolve all ${openReviewCount} open review comment${openReviewCount === 1 ? "" : "s"} before marking this milestone complete.`
+      );
+      return;
+    }
     try {
       const res = await axiosInstance.put(`/timelines/${item.id}`, {
         status: newStatus,
@@ -106,24 +114,35 @@ export function MilestonesTab({ jobId, role, onChanged }) {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Milestones</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Break the work into clear, dated checkpoints both sides can track.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
-        >
-          <Plus className="w-4 h-4" />
-          New milestone
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {reviewBlocked && (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+              title="A milestone cannot be marked complete while review comments are still open."
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              {openReviewCount} open review comment{openReviewCount === 1 ? "" : "s"}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+          >
+            <Plus className="w-4 h-4" />
+            New milestone
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -150,6 +169,8 @@ export function MilestonesTab({ jobId, role, onChanged }) {
               col={col}
               items={grouped[col.id] || []}
               role={role}
+              reviewBlocked={reviewBlocked}
+              openReviewCount={openReviewCount}
               onStatusChange={handleStatusChange}
               onEdit={(item) => {
                 setEditing(item);
@@ -164,7 +185,7 @@ export function MilestonesTab({ jobId, role, onChanged }) {
   );
 }
 
-function Column({ col, items, role, onStatusChange, onEdit, onDelete }) {
+function Column({ col, items, role, reviewBlocked, openReviewCount, onStatusChange, onEdit, onDelete }) {
   const Icon = col.icon;
   return (
     <div className={`bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-t-4 ${col.accent} p-3`}>
@@ -184,6 +205,8 @@ function Column({ col, items, role, onStatusChange, onEdit, onDelete }) {
             key={item.id}
             item={item}
             role={role}
+            reviewBlocked={reviewBlocked}
+            openReviewCount={openReviewCount}
             onMove={onStatusChange}
             onEdit={() => onEdit(item)}
             onDelete={() => onDelete(item)}
@@ -194,7 +217,7 @@ function Column({ col, items, role, onStatusChange, onEdit, onDelete }) {
   );
 }
 
-function MilestoneCard({ item, role, onMove, onEdit, onDelete }) {
+function MilestoneCard({ item, role, reviewBlocked, openReviewCount, onMove, onEdit, onDelete }) {
   const status = statusFor(item);
   const days = daysUntil(item.endDate);
   const overdue = days != null && days < 0 && status !== "COMPLETED";
@@ -279,9 +302,19 @@ function MilestoneCard({ item, role, onMove, onEdit, onDelete }) {
             <button
               type="button"
               onClick={() => onMove(item, "COMPLETED")}
-              className="flex-1 text-xs font-medium px-2 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={reviewBlocked}
+              title={
+                reviewBlocked
+                  ? `Resolve all ${openReviewCount} open review comment${openReviewCount === 1 ? "" : "s"} first`
+                  : undefined
+              }
+              className={`flex-1 text-xs font-medium px-2 py-1 rounded-lg ${
+                reviewBlocked
+                  ? "bg-emerald-300 text-white cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              }`}
             >
-              Mark complete
+              {reviewBlocked ? "Resolve comments first" : "Mark complete"}
             </button>
           )}
         </div>

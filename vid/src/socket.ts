@@ -119,6 +119,9 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     const pubClient = new Redis(redisUrl, redisOpts);
     const subClient = pubClient.duplicate();
 
+    // Track whether we've already logged an error per client so a flapping
+    // Redis doesn't fill the log, and so we never throw an Error event without
+    // a listener (which Node would surface as an uncaught exception).
     pubClient.on("error", (err) => {
       logger.error("Socket.IO Redis pub error: %s", err.message);
       socketIoRedisAdapterOk = false;
@@ -130,7 +133,26 @@ const initializeSocket = async (server: HttpServer): Promise<SocketIOServer> => 
     pubClient.on("ready", () => { socketIoRedisAdapterOk = true; });
     subClient.on("ready", () => { socketIoRedisAdapterOk = true; });
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    // Use allSettled so a failure on one client doesn't leave the other
+    // promise unhandled (which Winston would treat as a fatal rejection
+    // and exit the API with exitOnError=true).
+    const [pubResult, subResult] = await Promise.allSettled([
+      pubClient.connect(),
+      subClient.connect(),
+    ]);
+
+    if (pubResult.status === "rejected" || subResult.status === "rejected") {
+      const reason =
+        (pubResult.status === "rejected" && (pubResult.reason as Error)?.message) ||
+        (subResult.status === "rejected" && (subResult.reason as Error)?.message) ||
+        "unknown";
+      // Tear down any half-open connections so retryStrategy doesn't keep
+      // looping in the background and emitting fresh errors after we've
+      // already decided to fall back to the in-memory adapter.
+      try { pubClient.disconnect(); } catch { /* noop */ }
+      try { subClient.disconnect(); } catch { /* noop */ }
+      throw new Error(reason);
+    }
 
     io.adapter(createAdapter(pubClient, subClient));
     socketIoRedisAdapterOk = true;

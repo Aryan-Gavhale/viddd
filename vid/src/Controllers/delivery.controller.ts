@@ -5,6 +5,7 @@ import logger from "../Utils/logger.js";
 import type { ExpressRequest, ExpressResponse, NextFunction, DbRow } from "../types/index.js";
 import type { PoolClient } from "pg";
 import { areDevPlaceholdersAllowed, createEscrowReleaseTransfer } from "../Services/payment.service.js";
+import { countOpenReviewComments } from "./videoReview.controller.js";
 
 type ScopeType = "ORDER" | "JOB";
 type ProjectRole = "client" | "freelancer" | "admin";
@@ -256,6 +257,19 @@ export const submitFinalDelivery: Handler = async (req, res, next) => {
       return next(new ApiError(409, "A final delivery is already waiting for client review"));
     }
 
+    // Block sending the cut for approval while review feedback is still open.
+    // The editor must resolve every comment first; the client uses the review
+    // panel to leave them, so this gate is what makes the loop work.
+    const openCount = await countOpenReviewComments({ kind: scopeType, id: scopeId });
+    if (openCount > 0) {
+      return next(
+        new ApiError(
+          409,
+          `Resolve all ${openCount} open review comment${openCount === 1 ? "" : "s"} before sending this cut for approval.`
+        )
+      );
+    }
+
     const body = (req.body || {}) as Record<string, unknown>;
     const releaseNotes = String(body.releaseNotes || "").trim();
     const reviewFileIds = normalizeIds(body.reviewFileIds ?? body.finalFileIds);
@@ -465,6 +479,19 @@ export const deliverFinalMaster: Handler = async (req, res, next) => {
     }
     if (String(delivery.status) !== "APPROVED") {
       return next(new ApiError(400, "Client must approve the review cut before final master delivery"));
+    }
+
+    // Final guard: even after the client has approved the review cut, refuse
+    // to push the project to "delivered" while comments are open. This is the
+    // last point at which we can block escrow release on unresolved feedback.
+    const openCount = await countOpenReviewComments({ kind: scopeType, id: scopeId });
+    if (openCount > 0) {
+      return next(
+        new ApiError(
+          409,
+          `Resolve all ${openCount} open review comment${openCount === 1 ? "" : "s"} before delivering the final master.`
+        )
+      );
     }
 
     const body = (req.body || {}) as Record<string, unknown>;

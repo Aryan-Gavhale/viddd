@@ -1,17 +1,23 @@
 -- =============================================
 -- REVENUE: Service Fee / Platform Commission
 -- =============================================
+-- NOTE: amount columns are NUMERIC(12,2) to match Order."totalPrice" and the
+-- cent-precise output of pricing.service.ts (roundMoney). Earlier versions of
+-- this migration used INTEGER which silently rejected fees like 11.13 with
+-- "invalid input syntax for type integer". The reconcile script
+-- scripts/fix-order-fee-columns.mjs upgrades pre-existing INTEGER columns
+-- in place.
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "platformFeePercent" DOUBLE PRECISION DEFAULT 12.5;
-ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "platformFeeAmount" INTEGER DEFAULT 0;
-ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "clientFeePercent" DOUBLE PRECISION DEFAULT 3.5;
-ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "clientFeeAmount" INTEGER DEFAULT 0;
-ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "freelancerPayout" INTEGER DEFAULT 0;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "platformFeeAmount"  NUMERIC(12,2)    DEFAULT 0;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "clientFeePercent"   DOUBLE PRECISION DEFAULT 3.5;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "clientFeeAmount"    NUMERIC(12,2)    DEFAULT 0;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "freelancerPayout"   NUMERIC(12,2)    DEFAULT 0;
 
 -- =============================================
 -- REVENUE: Template Marketplace Commission
 -- =============================================
-ALTER TABLE "TemplatePurchase" ADD COLUMN IF NOT EXISTS "platformCommission" INTEGER DEFAULT 0;
-ALTER TABLE "TemplatePurchase" ADD COLUMN IF NOT EXISTS "sellerPayout" INTEGER DEFAULT 0;
+ALTER TABLE "TemplatePurchase" ADD COLUMN IF NOT EXISTS "platformCommission" NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE "TemplatePurchase" ADD COLUMN IF NOT EXISTS "sellerPayout"       NUMERIC(12,2) DEFAULT 0;
 
 -- =============================================
 -- REVENUE: Premium Subscriptions
@@ -96,7 +102,7 @@ CREATE INDEX IF NOT EXISTS "idx_enterprise_member" ON "EnterpriseMember" ("userI
 CREATE TABLE IF NOT EXISTS "PlatformRevenue" (
   "id"                SERIAL PRIMARY KEY,
   "type"              VARCHAR(30) NOT NULL,
-  "amount"            INTEGER NOT NULL DEFAULT 0,
+  "amount"            NUMERIC(12,2) NOT NULL DEFAULT 0,
   "sourceId"          INTEGER,
   "sourceType"        VARCHAR(30),
   "description"       TEXT,

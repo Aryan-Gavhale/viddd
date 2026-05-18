@@ -5,6 +5,11 @@ import {
   MessageSquare,
   Star,
   Tag,
+  PackageCheck,
+  Film,
+  Subtitles,
+  Zap,
+  RefreshCw,
 } from "lucide-react";
 import { Avatar } from "./Avatar.jsx";
 import {
@@ -14,8 +19,9 @@ import {
   formatRelativeTime,
 } from "./utils.js";
 
-export function OverviewTab({ summary, role }) {
-  const job = summary?.job || {};
+export function OverviewTab({ summary, role, scopeKind = "JOB" }) {
+  const isOrder = scopeKind === "ORDER";
+  const entity = (isOrder ? summary?.order : summary?.job) || summary?.job || {};
   const peer = summary?.peer;
   const counts = summary?.counts || {};
   const recent = summary?.recentMessages || [];
@@ -23,28 +29,34 @@ export function OverviewTab({ summary, role }) {
   return (
     <div className="p-6 space-y-6">
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <PeerCard peer={peer} role={role} />
-        <SummaryCard counts={counts} job={job} />
+        <PeerCard peer={peer} role={role} isOrder={isOrder} />
+        {isOrder ? (
+          <OrderSummaryCard counts={counts} order={entity} />
+        ) : (
+          <SummaryCard counts={counts} job={entity} />
+        )}
       </section>
 
       <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
         <div className="flex items-center gap-2 mb-3">
           <Briefcase className="w-4 h-4 text-indigo-600" />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
-            Project Brief
+            {isOrder ? "Order Brief" : "Project Brief"}
           </h2>
         </div>
-        {job.description ? (
+        {entity.description || entity.requirements ? (
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-            {job.description}
+            {entity.description || entity.requirements}
           </p>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            No project description provided.
+            {isOrder
+              ? "No additional requirements were captured at checkout."
+              : "No project description provided."}
           </p>
         )}
 
-        {Array.isArray(job.requiredSkills) && job.requiredSkills.length > 0 && (
+        {!isOrder && Array.isArray(entity.requiredSkills) && entity.requiredSkills.length > 0 && (
           <div className="mt-5">
             <div className="flex items-center gap-2 mb-2">
               <Tag className="w-4 h-4 text-indigo-600" />
@@ -53,7 +65,7 @@ export function OverviewTab({ summary, role }) {
               </h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              {job.requiredSkills.map((s) => (
+              {entity.requiredSkills.map((s) => (
                 <span
                   key={s}
                   className="px-2.5 py-1 text-xs font-medium rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
@@ -65,7 +77,7 @@ export function OverviewTab({ summary, role }) {
           </div>
         )}
 
-        <KeyFacts job={job} />
+        {isOrder ? <OrderKeyFacts order={entity} /> : <KeyFacts job={entity} />}
       </section>
 
       <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
@@ -106,12 +118,14 @@ export function OverviewTab({ summary, role }) {
   );
 }
 
-function PeerCard({ peer, role }) {
+function PeerCard({ peer, role, isOrder }) {
   if (!peer) {
     return (
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-6 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
         {role === "client"
-          ? "No freelancer hired yet."
+          ? isOrder
+            ? "No editor assigned yet."
+            : "No freelancer hired yet."
           : "Waiting for client information."}
       </div>
     );
@@ -193,6 +207,37 @@ function SummaryCard({ counts, job }) {
   );
 }
 
+function OrderSummaryCard({ counts, order }) {
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200 mb-3">
+        At a glance
+      </h3>
+      <ul className="space-y-2 text-sm">
+        <SummaryRow icon={RefreshCw} label="Revisions">
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {counts.milestonesDone || 0}
+          </span>
+          <span className="text-gray-500"> / {counts.milestones || 0} requested</span>
+        </SummaryRow>
+        <SummaryRow icon={FileText} label="Files">
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {counts.files || 0}
+          </span>
+        </SummaryRow>
+        <SummaryRow icon={MessageSquare} label="Unread messages">
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {counts.messages || 0}
+          </span>
+        </SummaryRow>
+        <SummaryRow icon={Briefcase} label="Ordered">
+          <span className="text-gray-700 dark:text-gray-200">{formatDate(order.createdAt)}</span>
+        </SummaryRow>
+      </ul>
+    </div>
+  );
+}
+
 function SummaryRow({ icon: Icon, label, children }) {
   return (
     <li className="flex items-center justify-between">
@@ -229,6 +274,41 @@ function KeyFacts({ job }) {
       {items.map((it) => (
         <div key={it.label}>
           <dt className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">
+            {it.label}
+          </dt>
+          <dd className="text-sm text-gray-800 dark:text-gray-200 mt-0.5">{it.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function OrderKeyFacts({ order }) {
+  const items = [];
+  if (order.package) items.push({ icon: PackageCheck, label: "Package", value: String(order.package) });
+  if (order.totalPrice != null)
+    items.push({ icon: PackageCheck, label: "Paid", value: formatCurrency(order.totalPrice, order.currency) });
+  if (order.deliveryDeadline)
+    items.push({ icon: PackageCheck, label: "Due", value: formatDate(order.deliveryDeadline) });
+  if (order.aspectRatio) items.push({ icon: Film, label: "Aspect ratio", value: order.aspectRatio });
+  if (order.videoType) items.push({ icon: Film, label: "Video type", value: order.videoType });
+  if (order.numberOfVideos)
+    items.push({ icon: Film, label: "Videos", value: String(order.numberOfVideos) });
+  if (order.totalDuration)
+    items.push({ icon: Film, label: "Total duration", value: `${order.totalDuration} min` });
+  if (order.addSubtitles)
+    items.push({ icon: Subtitles, label: "Subtitles", value: "Included" });
+  if (order.expressDelivery)
+    items.push({ icon: Zap, label: "Express delivery", value: "Yes" });
+
+  if (items.length === 0) return null;
+
+  return (
+    <dl className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+      {items.map((it) => (
+        <div key={it.label}>
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold inline-flex items-center gap-1">
+            {it.icon ? <it.icon className="w-3 h-3" /> : null}
             {it.label}
           </dt>
           <dd className="text-sm text-gray-800 dark:text-gray-200 mt-0.5">{it.value}</dd>

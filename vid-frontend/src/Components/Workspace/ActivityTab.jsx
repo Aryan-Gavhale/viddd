@@ -1,16 +1,20 @@
-import { Activity, FileText, MessageSquare, CheckCircle2 } from "lucide-react";
+import { Activity, FileText, MessageSquare, CheckCircle2, RefreshCw } from "lucide-react";
 import { formatRelativeTime } from "./utils.js";
 
 const ICONS = {
   milestone: CheckCircle2,
   file: FileText,
   message: MessageSquare,
+  status: RefreshCw,
 };
 
 const COLORS = {
   milestone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   file: "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
   message: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  // Order status changes show up on the Activity tab when viewing a gig order.
+  // Use a distinct purple tone so they're easy to scan against file events.
+  status: "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
 };
 
 export function ActivityTab({ summary }) {
@@ -64,11 +68,13 @@ export function ActivityTab({ summary }) {
 function labelFor(e) {
   if (e.kind === "milestone") return `Milestone updated · ${e.subject}`;
   if (e.kind === "file") return `File added · ${e.subject}`;
+  if (e.kind === "status") return e.subject; // already pre-formatted by backend
   return e.subject;
 }
 
 function prettyDetail(e) {
   if (!e.detail) return "";
   if (e.kind === "milestone") return `Status: ${e.detail}`;
+  if (e.kind === "status") return ""; // duplicated in subject
   return String(e.detail);
 }

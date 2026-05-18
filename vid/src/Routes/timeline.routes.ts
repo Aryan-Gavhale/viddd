@@ -5,6 +5,7 @@ import { validateBody } from "../Middlewares/validate.middleware.js";
 import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import type { AuthUser, DbRow } from "../types/index.js";
+import { countOpenReviewComments } from "../Controllers/videoReview.controller.js";
 import Joi from "joi";
 
 const createTimelineSchema = Joi.object({
@@ -119,6 +120,24 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
 
       if (timeline["postedById"] !== req.user.id && timeline["freelancerId"] !== req.user.id) {
         throw new ApiError(403, "You are not a participant of this project");
+      }
+
+      // Block milestone completion while review feedback is still open. The
+      // editor must address every client comment before the milestone (and the
+      // money tied to it) can move forward. Mirrored on the order side too.
+      const wantsCompletion = status === "COMPLETED" || (progress != null && progress >= 100);
+      const alreadyCompleted = Boolean(timeline["isCompleted"]) || String(timeline["status"]) === "COMPLETED";
+      if (wantsCompletion && !alreadyCompleted) {
+        const openCount = await countOpenReviewComments({
+          kind: "JOB",
+          id: Number(timeline["jobId"]),
+        });
+        if (openCount > 0) {
+          throw new ApiError(
+            409,
+            `Resolve all open review comments before completing this milestone (${openCount} still open).`
+          );
+        }
       }
 
       const setClauses: string[] = [`"updatedAt" = NOW()`];

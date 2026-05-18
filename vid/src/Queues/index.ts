@@ -30,11 +30,23 @@ function initQueues() {
     );
   }
 
-  const redisOpts: Record<string, unknown> = {
+  type IORedisOptions = import("ioredis").RedisOptions;
+
+  // Common transport-level settings shared by every Redis client (auth, TLS).
+  const baseOpts: IORedisOptions = {
     ...(REDIS_PASSWORD ? { password: REDIS_PASSWORD } : {}),
     ...(usesTls
       ? { tls: { rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false" } }
       : {}),
+  };
+
+  // Settings that are only safe on the regular `client` connection. Bull's
+  // `bclient` (blocking) and `subscriber` connections explicitly forbid
+  // `maxRetriesPerRequest` and `enableReadyCheck`; using them throws
+  // "Using a redis instance with enableReadyCheck or maxRetriesPerRequest
+  // for bclient/subscriber is not permitted" and was crashing the process
+  // on startup. See https://github.com/OptimalBits/bull/issues/1873
+  const clientOnlyOpts: IORedisOptions = {
     maxRetriesPerRequest: isDev() ? 1 : 3,
     retryStrategy: isDev()
       ? (times: number) => (times > 2 ? null : Math.min(times * 200, 2000))
@@ -42,10 +54,13 @@ function initQueues() {
   };
 
   const queueOptions: QueueOptions = {
-    redis: redisOpts as QueueOptions["redis"],
-    createClient: (type) => {
+    createClient: (type: "client" | "subscriber" | "bclient") => {
       const { default: IORedis } = require("ioredis") as { default: typeof import("ioredis").default };
-      const client = new IORedis(REDIS_URL, redisOpts as import("ioredis").RedisOptions);
+      const opts: IORedisOptions =
+        type === "client"
+          ? { ...baseOpts, ...clientOnlyOpts }
+          : { ...baseOpts, maxRetriesPerRequest: null, enableReadyCheck: false };
+      const client = new IORedis(REDIS_URL, opts);
       client.on("error", () => {});
       return client as unknown as Queue.Queue["client"];
     },

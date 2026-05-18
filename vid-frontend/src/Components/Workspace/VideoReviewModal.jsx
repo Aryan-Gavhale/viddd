@@ -86,10 +86,41 @@ function Avatar({ name, src, size = 28 }) {
   );
 }
 
-export default function VideoReviewModal({ open, onClose, jobId, file, onFileStatusChange }) {
+export default function VideoReviewModal({ open, onClose, scope, jobId, role, file, onFileStatusChange }) {
   const currentUser = useSelector(selectUser);
   const myId = currentUser?.id != null ? Number(currentUser.id) : null;
-  const isClient = currentUser?.role === "CLIENT";
+  // Prefer the workspace-derived role passed in by FilesTab (lowercase
+  // "client" | "freelancer", from `summary.role`). Fall back to the legacy
+  // Redux user role check so callers that haven't migrated still work.
+  const normalizedRole =
+    role === "client" || role === "freelancer"
+      ? role
+      : currentUser?.role === "CLIENT"
+      ? "client"
+      : currentUser?.role === "FREELANCER"
+      ? "freelancer"
+      : null;
+  const isClientView = normalizedRole === "client";
+  const isEditor = normalizedRole === "freelancer";
+
+  // The modal historically took only `jobId`. The unified workspace now passes
+  // a `scope` object instead, but we still accept the legacy prop so any
+  // straggling callers (e.g. Dashboards / direct deep-links) keep working.
+  const effectiveScope = scope || (jobId ? { kind: "JOB", id: Number(jobId) } : null);
+  const scopeKind = effectiveScope?.kind || "JOB";
+  const scopeId = effectiveScope?.id;
+  const apiBase =
+    effectiveScope == null
+      ? null
+      : effectiveScope.kind === "ORDER"
+      ? `/workspace/orders/${effectiveScope.id}`
+      : `/workspace/projects/${effectiveScope.id}`;
+  // Co-watch socket events still target the job room since the socket layer
+  // has only ever known about job rooms. For order-scoped reviews we skip the
+  // co-watch room join and the modal degrades to a single-viewer experience —
+  // a follow-up can wire ROOMS.order through chatStore. The review comments
+  // (which are the primary feature) are scope-aware end-to-end already.
+  const allowCoWatch = scopeKind === "JOB" && scopeId != null;
 
   const [versionStack, setVersionStack] = useState([]);
   const [mediaState, setMediaState] = useState(null);
@@ -130,10 +161,10 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   /* ────────────── version stack ────────────── */
   useEffect(() => {
-    if (!open || !file?.fileName) return;
+    if (!open || !file?.fileName || !apiBase) return;
     let alive = true;
     axiosInstance
-      .get(`/workspace/projects/${jobId}/files`)
+      .get(`${apiBase}/files`)
       .then((res) => {
         if (!alive) return;
         const all = res.data?.data?.files || [];
@@ -148,7 +179,7 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
     return () => {
       alive = false;
     };
-  }, [open, file?.id, file?.fileName, jobId]);
+  }, [open, file?.id, file?.fileName, apiBase]);
 
   useEffect(() => {
     let alive = true;
@@ -173,12 +204,12 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   /* ────────────── load + realtime sync ────────────── */
   const reload = useCallback(async () => {
-    if (!file?.id || !jobId) return;
+    if (!file?.id || !apiBase) return;
     setLoadingComments(true);
     setCommentError("");
     try {
       const res = await axiosInstance.get(
-        `/workspace/projects/${jobId}/files/${file.id}/review/comments`
+        `${apiBase}/files/${file.id}/review/comments`
       );
       setComments(res.data?.data || []);
     } catch (e) {
@@ -186,7 +217,7 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
     } finally {
       setLoadingComments(false);
     }
-  }, [file?.id, jobId]);
+  }, [file?.id, apiBase]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -249,9 +280,9 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   /* ────────────── co-watch wiring ────────────── */
   useEffect(() => {
-    if (!open || !coWatchOn || !file?.id) return undefined;
+    if (!open || !coWatchOn || !file?.id || !allowCoWatch) return undefined;
     socketClient.connect();
-    socketClient.emitRaw(EVENTS.COWATCH_JOIN, { jobId, fileId: file.id });
+    socketClient.emitRaw(EVENTS.COWATCH_JOIN, { jobId: scopeId, fileId: file.id });
 
     const onState = ({ currentTimeSec, isPlaying: playing, fileId }) => {
       if (fileId !== file.id) return;
@@ -286,19 +317,19 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
       socketClient.off(EVENTS.COWATCH_SEEK, onSeek);
       socketClient.off(EVENTS.COWATCH_PARTICIPANTS, onParts);
       try {
-        socketClient.emitRaw(EVENTS.COWATCH_LEAVE, { jobId, fileId: file.id });
+        socketClient.emitRaw(EVENTS.COWATCH_LEAVE, { jobId: scopeId, fileId: file.id });
       } catch {
         /* ignore */
       }
       setParticipants([]);
     };
-  }, [open, coWatchOn, file?.id, jobId]);
+  }, [open, coWatchOn, file?.id, scopeId, allowCoWatch]);
 
   const broadcastAction = (kind, time) => {
-    if (!coWatchOn || !file?.id) return;
+    if (!coWatchOn || !file?.id || !allowCoWatch) return;
     if (remoteSeekRef.current) return;
     try {
-      socketClient.emitRaw(kind, { jobId, fileId: file.id, currentTimeSec: time });
+      socketClient.emitRaw(kind, { jobId: scopeId, fileId: file.id, currentTimeSec: time });
     } catch {
       /* ignore */
     }
@@ -416,9 +447,10 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   const submitComment = async () => {
     if (!draft.trim() && strokes.length === 0) return;
+    if (!apiBase) return;
     try {
       await axiosInstance.post(
-        `/workspace/projects/${jobId}/files/${file.id}/review/comments`,
+        `${apiBase}/files/${file.id}/review/comments`,
         {
           content: draft.trim() || "(drawing)",
           timestampSec: Number(currentTime.toFixed(3)),
@@ -434,10 +466,10 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
   };
 
   const submitReply = async (parent) => {
-    if (!replyDraft.trim()) return;
+    if (!replyDraft.trim() || !apiBase) return;
     try {
       await axiosInstance.post(
-        `/workspace/projects/${jobId}/files/${file.id}/review/comments`,
+        `${apiBase}/files/${file.id}/review/comments`,
         {
           content: replyDraft.trim(),
           timestampSec: Number(parent.timestampSec || 0),
@@ -452,10 +484,18 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
   };
 
   const toggleResolve = async (comment) => {
+    if (!apiBase) return;
+    if (!isEditor) {
+      // Only the editor can resolve / re-open review notes — that gates
+      // milestone completion. The composer button is hidden for clients,
+      // but if anything ever wires it up we still no-op safely here.
+      toast.info("Only the editor can mark a comment resolved.");
+      return;
+    }
     try {
       const target = comment.status === "RESOLVED" ? "OPEN" : "RESOLVED";
       await axiosInstance.post(
-        `/workspace/projects/${jobId}/files/${file.id}/review/comments/${comment.id}/resolve`,
+        `${apiBase}/files/${file.id}/review/comments/${comment.id}/resolve`,
         { status: target }
       );
     } catch (e) {
@@ -465,9 +505,10 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
 
   const deleteOne = async (comment) => {
     if (!window.confirm("Delete this comment?")) return;
+    if (!apiBase) return;
     try {
       await axiosInstance.delete(
-        `/workspace/projects/${jobId}/files/${file.id}/review/comments/${comment.id}`
+        `${apiBase}/files/${file.id}/review/comments/${comment.id}`
       );
     } catch (e) {
       setCommentError(e?.response?.data?.message || "Failed to delete");
@@ -475,11 +516,11 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
   };
 
   const setStatus = async (status) => {
-    if (!isClient) return;
+    if (!isClientView || !apiBase) return;
     setStatusBusy(true);
     try {
       const res = await axiosInstance.patch(
-        `/workspace/projects/${jobId}/files/${file.id}`,
+        `${apiBase}/files/${file.id}`,
         { status }
       );
       onFileStatusChange?.({ ...file, ...res.data?.data, status });
@@ -580,7 +621,7 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
               <Download className="w-3.5 h-3.5" /> Download
             </a>
           )}
-          {isClient && file.status !== "APPROVED" && (
+          {isClientView && file.status !== "APPROVED" && (
             <>
               <button
                 onClick={() => setStatus("CHANGES_REQUESTED")}
@@ -815,7 +856,11 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitComment();
                   }}
-                  placeholder="Leave a frame-accurate note for this moment… (Ctrl/⌘+Enter to send)"
+                  placeholder={
+                    isClientView
+                      ? "Pause the video and pin a frame-accurate note for the editor… (Ctrl/⌘+Enter to send)"
+                      : "Reply to the client or leave an internal note at this frame… (Ctrl/⌘+Enter to send)"
+                  }
                   rows={2}
                   className="flex-1 bg-gray-800 border border-white/10 rounded-md px-3 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
@@ -917,24 +962,45 @@ export default function VideoReviewModal({ open, onClose, jobId, file, onFileSta
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => toggleResolve(c)}
-                          className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded ${
-                            c.status === "RESOLVED"
-                              ? "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
-                              : "text-gray-700 bg-gray-100 hover:bg-gray-200"
-                          }`}
-                        >
-                          {c.status === "RESOLVED" ? (
-                            <>
-                              <RefreshCcw className="w-3 h-3" /> Re-open
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" /> Resolve
-                            </>
-                          )}
-                        </button>
+                        {isEditor ? (
+                          <button
+                            onClick={() => toggleResolve(c)}
+                            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded ${
+                              c.status === "RESOLVED"
+                                ? "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
+                                : "text-gray-700 bg-gray-100 hover:bg-gray-200"
+                            }`}
+                          >
+                            {c.status === "RESOLVED" ? (
+                              <>
+                                <RefreshCcw className="w-3 h-3" /> Re-open
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" /> Resolve
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span
+                            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded ${
+                              c.status === "RESOLVED"
+                                ? "text-emerald-700 bg-emerald-100"
+                                : "text-amber-700 bg-amber-100"
+                            }`}
+                            title={c.status === "RESOLVED" ? "Editor marked this resolved" : "Waiting for editor to resolve"}
+                          >
+                            {c.status === "RESOLVED" ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" /> Resolved
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-3 h-3" /> Open
+                              </>
+                            )}
+                          </span>
+                        )}
                         <button
                           onClick={() => {
                             setReplyTo(c.id);

@@ -38,7 +38,7 @@ function titleFor(notification) {
 
 function hrefFor(notification) {
   const entityId = notification.entityId || notification.metadata?.entityId;
-  if (notification.entityType === "ORDER" && entityId) return `/orders/${entityId}`;
+  if (notification.entityType === "ORDER" && entityId) return `/workspace?orderId=${entityId}`;
   if (notification.entityType === "MESSAGE" && notification.metadata?.jobId) {
     return `/workspace?jobId=${notification.metadata.jobId}`;
   }

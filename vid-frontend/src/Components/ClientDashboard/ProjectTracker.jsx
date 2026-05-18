@@ -243,10 +243,16 @@ export default function ProjectTracker() {
     fetchData();
   }, [navigate]);
 
-  // Handle job/order actions
+  // Handle job/order actions. For orders we route to the unified workspace
+  // so the dashboard, the post-checkout success screen, and email deep-links
+  // all converge on the same surface.
   const handleViewOrder = (project) => {
     console.log(`[ProjectTracker] Navigating to ${activeTab === "pending" ? "job" : "order"} ${project.id}`);
-    navigate(activeTab === "pending" ? `/jobs/${project.id}` : `/orders/${project.id}`);
+    navigate(
+      activeTab === "pending"
+        ? `/jobs/${project.id}`
+        : `/client/workspace?orderId=${project.id}`
+    );
   };
 
   const handleMessageFreelancer = (project) => {
@@ -269,7 +275,11 @@ export default function ProjectTracker() {
 
   const handleViewDetails = (project) => {
     console.log(`[ProjectTracker] Viewing details for ${activeTab === "pending" ? "job" : "order"} ${project.id}`);
-    navigate(activeTab === "pending" ? `/client/jobs/${project.id}/applicants` : `/orders/${project.id}/details`);
+    navigate(
+      activeTab === "pending"
+        ? `/client/jobs/${project.id}/applicants`
+        : `/client/workspace?orderId=${project.id}`
+    );
   };
 
   const handleRejectJob = async (jobId) => {

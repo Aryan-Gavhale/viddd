@@ -21,7 +21,7 @@ import {
 import { toast } from "react-toastify";
 import axiosInstance from "../../utils/axios.js";
 import { Avatar } from "./Avatar.jsx";
-import { fullName, formatBytes, formatRelativeTime } from "./utils.js";
+import { fullName, formatBytes, formatRelativeTime, workspaceFilesUrl } from "./utils.js";
 import VideoReviewModal from "./VideoReviewModal.jsx";
 
 const CATEGORY_OPTIONS = [
@@ -74,15 +74,54 @@ function isStorageCredentialsError(error) {
   );
 }
 
-function devPlaceholderUrl(file, jobId) {
-  return `dev-placeholder://job/${jobId}/${Date.now()}-${encodeURIComponent(file.name)}`;
+function devPlaceholderUrl(file, scope) {
+  const slug = scope?.kind === "ORDER" ? `order/${scope.id}` : `job/${scope?.id}`;
+  return `dev-placeholder://${slug}/${Date.now()}-${encodeURIComponent(file.name)}`;
 }
 
 function allowDevPlaceholderUploads() {
   return import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_PLACEHOLDER_UPLOADS === "true";
 }
 
-export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
+/**
+ * Editors hand off review cuts; clients only ever upload reference material.
+ * Anything outside those two paths comes through chat instead.
+ */
+const UPLOAD_SPEC_BY_ROLE = {
+  freelancer: {
+    label: "Upload review cut",
+    emptyTitle: "No review cuts yet",
+    emptyHint: "Click here to upload your first review cut.",
+    accept: "video/*",
+    category: "deliverable",
+    note: "Watermarked review cut",
+    videoOnly: true,
+  },
+  client: {
+    label: "Upload reference",
+    emptyTitle: "No reference material yet",
+    emptyHint: "Share a brief, brand assets, or example videos for the editor.",
+    accept: "image/*,video/*,application/pdf,.zip,.doc,.docx",
+    category: "reference",
+    note: "Client reference material",
+    videoOnly: false,
+  },
+};
+
+/**
+ * `scope` is `{ kind: "JOB" | "ORDER", id: number }`. We accept the legacy
+ * `jobId` prop as a fall-through so callers that still pass a bare jobId
+ * (workspace deep-links, older codepaths) keep working until they migrate.
+ */
+export function FilesTab({ scope, jobId, role, readOnly = false, onChanged }) {
+  const effectiveScope = scope || (jobId ? { kind: "JOB", id: Number(jobId) } : null);
+  const scopeKind = effectiveScope?.kind || "JOB";
+  const scopeId = effectiveScope?.id;
+  const filesUrl = workspaceFilesUrl(effectiveScope);
+  const uploadSpec = UPLOAD_SPEC_BY_ROLE[role] || UPLOAD_SPEC_BY_ROLE.client;
+  const isEditor = role === "freelancer";
+  const isClientView = role === "client";
+
   const [files, setFiles] = useState([]);
   const [delivery, setDelivery] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -94,11 +133,15 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    if (!scopeId || !filesUrl) {
+      setLoading(false);
+      return undefined;
+    }
     let alive = true;
     setLoading(true);
     Promise.all([
-      axiosInstance.get(`/workspace/projects/${jobId}/files`),
-      axiosInstance.get(`/deliveries/JOB/${jobId}`).catch(() => null),
+      axiosInstance.get(filesUrl),
+      axiosInstance.get(`/deliveries/${scopeKind}/${scopeId}`).catch(() => null),
     ])
       .then(([res, deliveryRes]) => {
         if (!alive) return;
@@ -112,7 +155,7 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
     return () => {
       alive = false;
     };
-  }, [jobId]);
+  }, [scopeKind, scopeId, filesUrl]);
 
   const filteredFiles =
     filter === "all" ? files : files.filter((f) => f.category === filter);
@@ -132,8 +175,8 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
       setUploading(true);
       setUploadProgress({ name: file.name, percent: 0 });
 
-      if (!file.type.startsWith("video/")) {
-        toast.info("For now only video uploads are supported here. Use chat for other files.");
+      if (uploadSpec.videoOnly && !file.type.startsWith("video/")) {
+        toast.info("Editors can only upload video review cuts here. Use chat for other attachments.");
         setUploading(false);
         setUploadProgress(null);
         return;
@@ -143,12 +186,15 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
       let usedDevPlaceholder = false;
 
       try {
-        // Use the multipart-aware /files API for big videos.
+        // Use the multipart-aware /files API for big videos. Both jobId and
+        // orderId are accepted by the backend; we forward whichever scope the
+        // user is working in so authorization picks the correct project / order.
         const initRes = await axiosInstance.post("/files/initiate-upload", {
           fileName: file.name,
           contentType: file.type,
           fileSize: file.size,
-          jobId: Number(jobId),
+          jobId: scopeKind === "JOB" ? Number(scopeId) : undefined,
+          orderId: scopeKind === "ORDER" ? Number(scopeId) : undefined,
         });
         const { uploadId, key, maxPartSize } = initRes.data.data;
         const totalParts = Math.max(1, Math.ceil(file.size / maxPartSize));
@@ -183,24 +229,26 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
         if (!isStorageCredentialsError(uploadError)) throw uploadError;
         if (!allowDevPlaceholderUploads()) throw uploadError;
         usedDevPlaceholder = true;
-        url = devPlaceholderUrl(file, jobId);
+        url = devPlaceholderUrl(file, effectiveScope);
         setUploadProgress({ name: file.name, percent: 100 });
       }
 
-      const created = await axiosInstance.post(`/workspace/projects/${jobId}/files`, {
+      const created = await axiosInstance.post(filesUrl, {
         fileName: file.name,
         url,
         mimeType: file.type,
         size: file.size,
-      category: "deliverable",
-      note: "Watermarked review cut",
+        category: uploadSpec.category,
+        note: uploadSpec.note,
       });
 
       setFiles((prev) => [created.data?.data, ...prev]);
       toast.success(
         usedDevPlaceholder
           ? "Workflow test file added — no real video stored. Use only for testing the approval flow."
-          : "File added to project"
+          : isEditor
+            ? "Review cut uploaded"
+            : "Reference uploaded"
       );
       onChanged?.();
     } catch (e) {
@@ -213,16 +261,17 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
   };
 
   const refreshDelivery = async () => {
-    const res = await axiosInstance.get(`/deliveries/JOB/${jobId}`).catch(() => null);
+    if (!scopeId) return;
+    const res = await axiosInstance.get(`/deliveries/${scopeKind}/${scopeId}`).catch(() => null);
     setDelivery(res?.data?.data || null);
   };
 
   const sendForApproval = async (file) => {
-    if (!file?.id) return;
+    if (!file?.id || !scopeId) return;
     setDeliveryAction(`submit-${file.id}`);
     try {
       const note = file.note || `Review cut ready: ${file.fileName}`;
-      await axiosInstance.post(`/deliveries/JOB/${jobId}/submit-final`, {
+      await axiosInstance.post(`/deliveries/${scopeKind}/${scopeId}/submit-final`, {
         reviewFileIds: [Number(file.id)],
         releaseNotes: note,
         sourceIncluded: false,
@@ -267,9 +316,23 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
   };
 
   const handleDelete = async (fileId) => {
+    if (!filesUrl) return;
+    const target = files.find((f) => Number(f.id) === Number(fileId));
+    if (target) {
+      // Symmetry guard so neither side accidentally removes the other's
+      // contributions. Backend enforces the same rule, this is just UX.
+      if (isClientView && target.category === "deliverable") {
+        toast.error("Only the editor can remove review cuts. Request changes inside the review instead.");
+        return;
+      }
+      if (isEditor && target.category === "reference") {
+        toast.error("Reference material is owned by the client. Ask them to remove it.");
+        return;
+      }
+    }
     if (!confirm("Remove this file from the project?")) return;
     try {
-      await axiosInstance.delete(`/workspace/projects/${jobId}/files/${fileId}`);
+      await axiosInstance.delete(`${filesUrl}/${fileId}`);
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
       toast.success("File removed");
       onChanged?.();
@@ -305,18 +368,19 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
             onClick={handlePickFile}
             disabled={uploading || readOnly}
             className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            title={isClientView ? "Share a brief, brand assets, or example videos with the editor" : "Upload your latest review cut for the client"}
           >
             {uploading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Upload className="w-4 h-4" />
             )}
-            {readOnly ? "Archived" : uploading ? "Uploading…" : "Upload review cut"}
+            {readOnly ? "Archived" : uploading ? "Uploading…" : uploadSpec.label}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="video/*"
+            accept={uploadSpec.accept}
             className="hidden"
             onChange={handleFile}
           />
@@ -341,7 +405,7 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
       {loading ? (
         <FileSkeleton />
       ) : filteredFiles.length === 0 ? (
-        <EmptyDrop onPick={handlePickFile} />
+        <EmptyDrop onPick={handlePickFile} title={uploadSpec.emptyTitle} hint={uploadSpec.emptyHint} disabled={readOnly} />
       ) : (
         <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredFiles.map((f) => (
@@ -364,7 +428,8 @@ export function FilesTab({ jobId, role, readOnly = false, onChanged }) {
       <VideoReviewModal
         open={!!reviewFile}
         onClose={() => setReviewFile(null)}
-        jobId={jobId}
+        scope={effectiveScope}
+        role={role}
         file={reviewFile}
         onFileStatusChange={(updated) => {
           if (!updated) return;
@@ -624,20 +689,19 @@ function FileCard({
   );
 }
 
-function EmptyDrop({ onPick }) {
+function EmptyDrop({ onPick, title = "No files yet", hint = "Click here to upload your first file.", disabled = false }) {
   return (
     <button
       type="button"
       onClick={onPick}
-      className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl py-12 px-6 text-center hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
+      disabled={disabled}
+      className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl py-12 px-6 text-center hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className="w-12 h-12 mx-auto rounded-full bg-indigo-50 dark:bg-indigo-900/40 flex items-center justify-center mb-3">
         <Paperclip className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
       </div>
-      <p className="text-sm font-semibold text-gray-900 dark:text-white">No files yet</p>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-        Click here to upload your first deliverable.
-      </p>
+      <p className="text-sm font-semibold text-gray-900 dark:text-white">{title}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{hint}</p>
     </button>
   );
 }
