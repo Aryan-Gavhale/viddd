@@ -45,7 +45,7 @@ const Badge = ({ children, className, ...props }) => (
 
 // Basic Card component
 const Card = ({ children, className, ...props }) => (
-  <div className={`bg-white rounded-lg shadow-md overflow-hidden ${className}`} {...props}>
+  <div className={`bg-white dark:bg-slate-900 rounded-lg shadow-md dark:shadow-black/40 overflow-hidden ${className}`} {...props}>
     {children}
   </div>
 )
@@ -156,7 +156,7 @@ export default function FAQPage() {
   const [openQuestion, setOpenQuestion] = useState(null)
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-slate-950 dark:to-slate-900">
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
         <div className="absolute inset-0 bg-grid-white/[0.1] bg-[size:16px_16px]" />
@@ -247,8 +247,8 @@ export default function FAQPage() {
                   <div className={`w-12 h-12 rounded-xl ${category.color} flex items-center justify-center mb-4`}>
                     <Icon className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">{category.label}</h3>
-                  <p className="text-sm text-gray-500">{category.description}</p>
+                  <h3 className="text-lg font-semibold mb-2 dark:text-slate-100">{category.label}</h3>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">{category.description}</p>
                 </div>
               </Card>
             )
@@ -275,16 +275,16 @@ export default function FAQPage() {
                     <div className="flex gap-4">
                       <div className="mt-1">
                         <HelpCircle
-                          className={`w-5 h-5 ${openQuestion === faq.question ? "text-blue-500" : "text-gray-400"}`}
+                          className={`w-5 h-5 ${openQuestion === faq.question ? "text-blue-500" : "text-gray-400 dark:text-slate-500"}`}
                         />
                       </div>
                       <div>
-                        <div className="font-medium text-gray-900 mb-1">{faq.question}</div>
-                        <Badge className="bg-gray-100 text-gray-600">{faq.tag}</Badge>
+                        <div className="font-medium text-gray-900 dark:text-slate-100 mb-1">{faq.question}</div>
+                        <Badge className="bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">{faq.tag}</Badge>
                       </div>
                     </div>
                     <ChevronDown
-                      className={`w-5 h-5 text-gray-500 transition-transform ${
+                      className={`w-5 h-5 text-gray-500 dark:text-slate-400 transition-transform ${
                         openQuestion === faq.question ? "rotate-180" : ""
                       }`}
                     />
@@ -298,7 +298,7 @@ export default function FAQPage() {
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <div className="px-6 pb-6 text-gray-600 border-t">
+                        <div className="px-6 pb-6 text-gray-600 dark:text-slate-300 border-t dark:border-slate-700">
                           <div className="pt-4">{faq.answer}</div>
                         </div>
                       </motion.div>
@@ -315,22 +315,22 @@ export default function FAQPage() {
           <Card className="relative overflow-hidden">
             <div className="p-8 sm:p-12">
               <div className="absolute right-0 top-0 w-1/2 h-full">
-                <div className="absolute inset-0 bg-gradient-to-r from-white via-white/90 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-white via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
                 <div className="absolute inset-0 bg-grid-black/[0.02]" />
                 <div className="h-full w-full flex items-center justify-center">
-                  <BookOpen className="w-48 h-48 text-indigo-900" />
+                  <BookOpen className="w-48 h-48 text-indigo-900 dark:text-indigo-300" />
                 </div>
               </div>
 
               <div className="relative max-w-lg">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <MessageCircle className="w-6 h-6 text-blue-600" />
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-xl">
+                    <MessageCircle className="w-6 h-6 text-blue-600 dark:text-blue-300" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-gray-900">Still need help?</h3>
+                  <h3 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Still need help?</h3>
                 </div>
 
-                <p className="text-gray-600 mb-8 text-lg">
+                <p className="text-gray-600 dark:text-slate-300 mb-8 text-lg">
                   Can't find what you're looking for? Our support team is here to help you withlooking for? Our support
                   team is here to help you with any questions or concerns.
                 </p>
@@ -340,7 +340,7 @@ export default function FAQPage() {
                     Contact Support
                     <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </Button>
-                  <Button className="bg-white text-blue-600 border border-blue-600 hover:bg-blue-50">
+                  <Button className="bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-300 border border-blue-600 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700">
                     Schedule a Call
                     <Clock className="ml-2 w-5 h-5" />
                   </Button>

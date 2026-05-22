@@ -2,6 +2,7 @@ import { useState } from "react"
 import { KeyRound, ArrowLeft, Loader2, Mail, AlertCircle } from "lucide-react"
 import {Link} from "react-router-dom"
 import { useNavigate } from "react-router-dom";
+import { passwordForgot } from "../../services/settingsApi"
 
 export default function PasswordRecovery({ defaultEmail = "" }) {
   const navigate = useNavigate()
@@ -24,32 +25,32 @@ export default function PasswordRecovery({ defaultEmail = "" }) {
 
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await passwordForgot(email)
       navigate(`/password-recovery/verify?email=${encodeURIComponent(email)}`)
     } catch (err) {
-      setError("Something went wrong. Please try again.")
+      setError(err?.response?.data?.message || "Something went wrong. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-950 p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-            <KeyRound className="w-6 h-6 text-purple-600" />
+          <div className="w-12 h-12 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center">
+            <KeyRound className="w-6 h-6 text-violet-600 dark:text-violet-400" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Reset Password</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Reset Password</h1>
         </div>
 
-        <p className="text-gray-600">
+        <p className="text-gray-600 dark:text-slate-400">
           Enter your email address and we'll send you instructions to reset your password.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
               Email address
             </label>
             <div className="relative">
@@ -63,16 +64,16 @@ export default function PasswordRecovery({ defaultEmail = "" }) {
                 }}
                 placeholder="Enter your email"
                 className={`w-full pl-10 pr-4 py-2 bg-transparent border-b-2 ${
-                  error ? "border-red-300" : "border-gray-300"
-                } focus:outline-none focus:border-gradient-to-r focus:from-purple-600 focus:to-indigo-600
-                  transition-colors placeholder:text-gray-400`}
+                  error ? "border-red-300" : "border-gray-300 dark:border-slate-700"
+                } text-gray-900 dark:text-slate-100 focus:outline-none focus:border-violet-600
+                  transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500`}
                 aria-invalid={error ? "true" : "false"}
                 aria-describedby={error ? "email-error" : undefined}
               />
-              <Mail className="w-5 h-5 text-gray-400 absolute left-0 top-1/2 transform -translate-y-1/2" />
+              <Mail className="w-5 h-5 text-gray-400 dark:text-slate-500 absolute left-0 top-1/2 transform -translate-y-1/2" />
             </div>
             {error && (
-              <div id="email-error" className="flex items-center space-x-1 text-sm text-red-600">
+              <div id="email-error" className="flex items-center space-x-1 text-sm text-red-600 dark:text-red-400">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -105,7 +106,7 @@ export default function PasswordRecovery({ defaultEmail = "" }) {
         <div className="text-center">
           <Link
             to="/login"
-            className="inline-flex items-center text-sm text-gray-600 hover:text-purple-600 transition-colors"
+            className="inline-flex items-center text-sm text-gray-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to login

@@ -59,21 +59,21 @@ export default function PopularServices() {
   }
 
   return (
-    <section className="py-12 bg-white">
+    <section className="py-12 bg-white dark:bg-slate-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Popular Services</h2>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Popular Services</h2>
           <div className="flex gap-2">
             <button
               onClick={() => scroll("left")}
-              className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="p-2 rounded-full border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 dark:text-slate-200 transition-colors"
               aria-label="Scroll left"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
             <button
               onClick={() => scroll("right")}
-              className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="p-2 rounded-full border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 dark:text-slate-200 transition-colors"
               aria-label="Scroll right"
             >
               <ChevronRight className="w-6 h-6" />

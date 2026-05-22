@@ -10,17 +10,17 @@ export default function FutureGoals() {
     return (
       <section className="relative">
         <div className="absolute inset-0 bg-gradient-to-l from-indigo-500 to-purple-600 transform -skew-y-3 -z-10"></div>
-        <div className="relative bg-white shadow-xl rounded-lg overflow-hidden">
+        <div className="relative bg-white dark:bg-slate-900 shadow-xl dark:shadow-black/40 rounded-lg overflow-hidden">
           <div className="px-4 py-8 sm:p-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Looking Ahead</h2>
-            <h3 className="text-2xl font-semibold text-indigo-700 mb-6 text-center">Our Future Goals</h3>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-8 text-center">Looking Ahead</h2>
+            <h3 className="text-2xl font-semibold text-indigo-700 dark:text-indigo-300 mb-6 text-center">Our Future Goals</h3>
             <ul className="space-y-4">
               {goals.map((goal, index) => (
                 <li key={index} className="flex items-start">
-                  <svg className="h-6 w-6 text-indigo-600 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-6 w-6 text-indigo-600 dark:text-indigo-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-gray-700">{goal}</span>
+                  <span className="text-gray-700 dark:text-slate-300">{goal}</span>
                 </li>
               ))}
             </ul>

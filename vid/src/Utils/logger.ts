@@ -13,6 +13,10 @@ const logger = winston.createLogger({
   format: winston.format.combine(
     winston.format.errors({ stack: true }),
     winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    // Without splat() the %s tokens used throughout the codebase
+    // (e.g. logger.error("foo: %s", err.message)) never get substituted,
+    // leaving error logs as un-actionable "foo: %s" lines.
+    winston.format.splat(),
     isProd
       ? winston.format.json()
       : winston.format.combine(

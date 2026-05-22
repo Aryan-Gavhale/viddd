@@ -1,34 +1,29 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext } from "react"
+import { useDispatch, useSelector } from "react-redux"
+import { selectResolvedTheme, setAppearance } from "../../redux/preferencesSlice"
 
 const ThemeContext = createContext({
   theme: "light",
-  setTheme: (theme) => {},
+  setTheme: () => {},
 })
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState("light")
+  const dispatch = useDispatch()
+  const resolvedTheme = useSelector(selectResolvedTheme)
 
-  useEffect(() => {
-    const storedTheme = localStorage.getItem("theme")
-    if (storedTheme) {
-      setTheme(storedTheme)
-    } else {
-      localStorage.setItem("theme", "light")
+  const setTheme = (next) => {
+    if (next === "light" || next === "dark" || next === "system") {
+      dispatch(setAppearance({ theme: next }))
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    localStorage.setItem("theme", theme)
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-  }, [theme])
-
-  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>
+  return (
+    <ThemeContext.Provider value={{ theme: resolvedTheme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  )
 }
 
 export const useTheme = () => useContext(ThemeContext)

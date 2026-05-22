@@ -143,8 +143,8 @@ export const SearchBar = ({ role, onSearch }) => {
           <div
             className={`absolute inset-0 border-2 rounded-full transition-all duration-300 ${
               isFocused
-                ? "border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] bg-white"
-                : "border-gray-200 hover:border-gray-300 bg-white"
+                ? "border-violet-400 shadow-[0_0_15px_rgba(124,58,237,0.3)] bg-white dark:bg-slate-800"
+                : "border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800"
             }`}
           />
           <input
@@ -163,15 +163,15 @@ export const SearchBar = ({ role, onSearch }) => {
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="relative w-full h-10 pl-12 pr-10 bg-transparent rounded-full outline-none text-sm text-gray-800"
+            className="relative w-full h-10 pl-12 pr-10 bg-transparent rounded-full outline-none text-sm text-gray-800 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500"
             aria-label="Search"
             autoComplete="off"
           />
-          <div className="absolute left-0 top-0 flex items-center justify-center w-12 h-10 text-gray-500 pointer-events-none">
+          <div className="absolute left-0 top-0 flex items-center justify-center w-12 h-10 text-gray-500 dark:text-slate-400 pointer-events-none">
             {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+              <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
             ) : (
-              <Search className={`w-5 h-5 ${isFocused ? "text-purple-600" : ""}`} />
+              <Search className={`w-5 h-5 ${isFocused ? "text-violet-600 dark:text-violet-400" : ""}`} />
             )}
           </div>
           {query && (
@@ -182,7 +182,7 @@ export const SearchBar = ({ role, onSearch }) => {
                 setOpen(false);
                 inputRef.current?.focus();
               }}
-              className="absolute right-3 top-0 flex items-center justify-center w-8 h-10 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-0 flex items-center justify-center w-8 h-10 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300"
               aria-label="Clear search"
             >
               <X className="w-4 h-4" />
@@ -192,19 +192,19 @@ export const SearchBar = ({ role, onSearch }) => {
       </form>
 
       {open && isFocused && query.trim().length >= MIN_CHARS && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[28rem] overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 rounded-xl shadow-2xl dark:shadow-black/40 border border-gray-100 dark:border-slate-800 py-2 z-50 max-h-[28rem] overflow-y-auto">
           {loading && totalCount === 0 ? (
-            <div className="px-4 py-6 text-center text-sm text-gray-500">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-500" />
+            <div className="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
+              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-violet-500" />
               Searching…
             </div>
           ) : totalCount === 0 ? (
-            <div className="px-4 py-6 text-center text-sm text-gray-500">
+            <div className="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
               No matches for &quot;{query.trim()}&quot;
               <button
                 type="button"
                 onClick={() => submitFreeText(query)}
-                className="block mx-auto mt-2 text-xs text-purple-600 hover:text-purple-800 font-medium"
+                className="block mx-auto mt-2 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 font-medium"
               >
                 Search all results →
               </button>
@@ -313,7 +313,7 @@ export const SearchBar = ({ role, onSearch }) => {
               <button
                 type="button"
                 onClick={() => submitFreeText(query)}
-                className="w-full mt-1 px-4 py-2 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors text-left border-t border-gray-100"
+                className="w-full mt-1 px-4 py-2 text-xs font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-left border-t border-gray-100 dark:border-slate-800"
               >
                 Show all results for &quot;{query.trim()}&quot; →
               </button>
@@ -328,7 +328,7 @@ export const SearchBar = ({ role, onSearch }) => {
 function Group({ label, icon, children }) {
   return (
     <div>
-      <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+      <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
         {icon}
         {label}
       </div>
@@ -344,14 +344,14 @@ function Row({ leading, title, subtitle, trailing, active, onClick, onMouseEnter
       onMouseEnter={onMouseEnter}
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
-        active ? "bg-purple-50" : "hover:bg-gray-50"
+        active ? "bg-violet-50 dark:bg-violet-900/20" : "hover:bg-gray-50 dark:hover:bg-slate-800"
       }`}
     >
       <div className="flex-shrink-0">{leading}</div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900 truncate">{title}</div>
+        <div className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{title}</div>
         {subtitle && (
-          <div className="text-[11px] text-gray-500 truncate">{subtitle}</div>
+          <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{subtitle}</div>
         )}
       </div>
       {trailing && <div className="ml-2 flex-shrink-0">{trailing}</div>}

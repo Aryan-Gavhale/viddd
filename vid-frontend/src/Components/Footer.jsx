@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useDispatch, useSelector } from "react-redux";
 import {
   FaFacebook,
   FaTwitter,
@@ -8,9 +10,21 @@ import {
   FaPinterest,
   FaGithub,
 } from "react-icons/fa";
+import { selectLanguage, setAppearance } from "../redux/preferencesSlice";
+
+const LANG_LABELS = {
+  en: "English",
+  es: "Español",
+  fr: "Français",
+  de: "Deutsch",
+  ja: "日本語",
+  hi: "हिंदी",
+};
 
 const Footer = () => {
-  const [language, setLanguage] = useState("English");
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const language = useSelector(selectLanguage);
   const [currency, setCurrency] = useState("INR");
   const [showLanguagePopup, setShowLanguagePopup] = useState(false);
   const languageRef = useRef(null);
@@ -20,7 +34,7 @@ const Footer = () => {
     const updateDropdownDirection = () => {
       if (languageRef.current) {
         const rect = languageRef.current.getBoundingClientRect();
-        const dropdownHeight = 150; // Approximate height of the dropdown
+        const dropdownHeight = 180;
         if (window.innerHeight - rect.bottom < dropdownHeight) {
           setLanguageDropdownDirection("up");
         } else {
@@ -37,7 +51,7 @@ const Footer = () => {
   }, []);
 
   const handleLanguageChange = (lang) => {
-    setLanguage(lang);
+    dispatch(setAppearance({ language: lang }));
     setShowLanguagePopup(false);
   };
 
@@ -48,42 +62,39 @@ const Footer = () => {
   return (
     <footer className="bg-neutral-900 text-white py-12">
       <div className="container mx-auto px-6 md:px-12">
-        {/* Top Section: Services */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div>
-            <h3 className="text-lg font-semibold mb-4">Company</h3>
+            <h3 className="text-lg font-semibold mb-4">{t("footer.companyHeading", "Company")}</h3>
             <ul className="text-gray-400 space-y-2">
-              <li><a href="#about" className="hover:text-white">About Us</a></li>
-              <li><a href="#careers" className="hover:text-white">Careers</a></li>
-              <li><a href="#blog" className="hover:text-white">Blog</a></li>
-              <li><a href="#partners" className="hover:text-white">Our Partners</a></li>
+              <li><a href="#about" className="hover:text-white">{t("footer.about", "About Us")}</a></li>
+              <li><a href="#careers" className="hover:text-white">{t("footer.careers", "Careers")}</a></li>
+              <li><a href="#blog" className="hover:text-white">{t("footer.blog", "Blog")}</a></li>
+              <li><a href="#partners" className="hover:text-white">{t("footer.partners", "Our Partners")}</a></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-4">Support</h3>
+            <h3 className="text-lg font-semibold mb-4">{t("footer.supportHeading", "Support")}</h3>
             <ul className="text-gray-400 space-y-2">
-              <li><a href="#help" className="hover:text-white">Help Center</a></li>
-              <li><a href="#faq" className="hover:text-white">FAQs</a></li>
-              <li><a href="#terms" className="hover:text-white">Terms & Conditions</a></li>
-              <li><a href="#privacy" className="hover:text-white">Privacy Policy</a></li>
+              <li><a href="#help" className="hover:text-white">{t("footer.help", "Help Center")}</a></li>
+              <li><a href="#faq" className="hover:text-white">{t("footer.faq", "FAQs")}</a></li>
+              <li><a href="#terms" className="hover:text-white">{t("footer.terms", "Terms & Conditions")}</a></li>
+              <li><a href="#privacy" className="hover:text-white">{t("footer.privacy", "Privacy Policy")}</a></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-4">Connect</h3>
+            <h3 className="text-lg font-semibold mb-4">{t("footer.connectHeading", "Connect")}</h3>
             <ul className="text-gray-400 space-y-2">
-              <li><a href="#contact" className="hover:text-white">Contact Us</a></li>
-              <li><a href="#social" className="hover:text-white">Social Media</a></li>
-              <li><a href="#feedback" className="hover:text-white">Feedback</a></li>
-              <li><a href="#news" className="hover:text-white">Newsletter</a></li>
+              <li><a href="#contact" className="hover:text-white">{t("footer.contact", "Contact Us")}</a></li>
+              <li><a href="#social" className="hover:text-white">{t("footer.social", "Social Media")}</a></li>
+              <li><a href="#feedback" className="hover:text-white">{t("footer.feedback", "Feedback")}</a></li>
+              <li><a href="#news" className="hover:text-white">{t("footer.newsletter", "Newsletter")}</a></li>
             </ul>
           </div>
         </div>
 
-        {/* Bottom Section: Social Media and Language */}
         <div className="flex flex-col md:flex-row justify-between items-center border-t border-gray-700 pt-6">
-          {/* Social Media Icons */}
           <div className="flex gap-4">
             <FaFacebook className="text-xl hover:text-blue-500 transition" />
             <FaTwitter className="text-xl hover:text-sky-400 transition" />
@@ -94,51 +105,35 @@ const Footer = () => {
             <FaGithub className="text-xl hover:text-gray-500 transition" />
           </div>
 
-          {/* Language and Currency Selector */}
           <div className="flex flex-col items-end gap-4 mt-6 md:mt-0">
-            {/* Language Selector */}
             <div ref={languageRef} className="relative">
               <button
                 className="text-sm text-gray-400 hover:text-white focus:outline-none"
                 onClick={() => setShowLanguagePopup(!showLanguagePopup)}
               >
-                {language} ▾
+                {LANG_LABELS[language] || "English"} ▾
               </button>
               {showLanguagePopup && (
                 <div
-                  className={`absolute right-0 bg-white text-black w-36 rounded shadow-lg z-50 ${
-                    languageDropdownDirection === "up" ? "-top-40" : "mt-2"
+                  className={`absolute right-0 bg-white text-black w-44 rounded shadow-lg z-50 ${
+                    languageDropdownDirection === "up" ? "-top-48" : "mt-2"
                   }`}
                 >
-                  <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-200"
-                    onClick={() => handleLanguageChange("English")}
-                  >
-                    English
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-200"
-                    onClick={() => handleLanguageChange("French")}
-                  >
-                    French
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-200"
-                    onClick={() => handleLanguageChange("Spanish")}
-                  >
-                    Spanish
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-200"
-                    onClick={() => handleLanguageChange("German")}
-                  >
-                    German
-                  </button>
+                  {Object.entries(LANG_LABELS).map(([code, label]) => (
+                    <button
+                      key={code}
+                      className={`block w-full text-left px-4 py-2 hover:bg-gray-200 ${
+                        language === code ? "font-medium text-violet-700" : ""
+                      }`}
+                      onClick={() => handleLanguageChange(code)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Currency Converter */}
             <select
               className="bg-neutral-700 text-white text-sm rounded px-3 py-1"
               value={currency}

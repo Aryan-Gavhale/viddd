@@ -25,7 +25,38 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 import redisClient from "../Config/redis.js";
 import logger from "./logger.js";
+import { sql } from "../db.js";
 import type { AuthUser, DbRow, JwtPayload } from "../types/index.js";
+
+/**
+ * Best-effort upsert of a `UserSession` row keyed by the refresh-token jti.
+ * Called from refresh-token issuance / rotation so the Settings → Sessions
+ * tab can list and revoke individual devices. Silently swallows errors so
+ * a missing table (pre-migration) doesn't block sign-in.
+ */
+async function upsertUserSession(
+  userId: number,
+  jti: string,
+  userAgent?: string | null,
+  ip?: string | null
+): Promise<void> {
+  try {
+    await sql(
+      `INSERT INTO "UserSession" ("userId", "refreshJti", "userAgent", "ip", "lastSeenAt")
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT ("refreshJti")
+       DO UPDATE SET "lastSeenAt" = NOW(), "userAgent" = COALESCE(EXCLUDED."userAgent", "UserSession"."userAgent"), "ip" = COALESCE(EXCLUDED."ip", "UserSession"."ip")`,
+      [userId, jti, userAgent || null, ip || null]
+    );
+  } catch (err) {
+    logger.warn("UserSession upsert failed for user %s: %s", userId, (err as Error).message);
+  }
+}
+
+export interface SessionContext {
+  userAgent?: string | null;
+  ip?: string | null;
+}
 
 type StringValue = SignOptions["expiresIn"];
 
@@ -102,7 +133,10 @@ export function generateAccessToken(user: AuthUser | DbRow): string {
   );
 }
 
-export async function generateRefreshToken(user: AuthUser | DbRow): Promise<{
+export async function generateRefreshToken(
+  user: AuthUser | DbRow,
+  ctx?: SessionContext
+): Promise<{
   token: string;
   jti: string;
   ttlSeconds: number;
@@ -133,6 +167,9 @@ export async function generateRefreshToken(user: AuthUser | DbRow): Promise<{
     logger.warn("Redis unavailable — refresh token family not tracked for user %s (dev only)", user.id);
   }
 
+  // Best-effort: track the new session so the Settings tab can list it.
+  await upsertUserSession(Number(user.id), jti, ctx?.userAgent, ctx?.ip);
+
   return { token, jti, ttlSeconds: REFRESH_TTL_SECONDS };
 }
 
@@ -147,7 +184,10 @@ export interface RefreshResult {
  * Verify a presented refresh token, rotate it, and return new tokens.
  * Throws on failure — callers should catch and respond 401.
  */
-export async function rotateRefreshToken(presentedToken: string): Promise<RefreshResult> {
+export async function rotateRefreshToken(
+  presentedToken: string,
+  ctx?: SessionContext
+): Promise<RefreshResult> {
   let decoded: RefreshTokenPayload;
   try {
     decoded = jwt.verify(presentedToken, getRefreshSecret()) as RefreshTokenPayload;
@@ -193,7 +233,20 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Refres
   };
 
   const accessToken = generateAccessToken(userShape);
-  const next = await generateRefreshToken(userShape); // overwrites Redis entry
+  const next = await generateRefreshToken(userShape, ctx); // overwrites Redis entry
+
+  // Replace the previous jti row with the new one so the Sessions list
+  // reflects the rotation (each refresh = same conceptual session).
+  if (decoded.jti && decoded.jti !== next.jti) {
+    try {
+      await sql(
+        `DELETE FROM "UserSession" WHERE "userId" = $1 AND "refreshJti" = $2`,
+        [userId, decoded.jti]
+      );
+    } catch {
+      /* ignore */
+    }
+  }
 
   return {
     user: { id: userId, email: userShape.email, role: String(userShape.role) },
@@ -209,6 +262,11 @@ export async function revokeRefreshFamily(userId: number): Promise<void> {
     await redisClient.del(refreshFamilyKey(userId));
   } catch {
     logger.warn("Redis unavailable — could not revoke refresh family for user %s", userId);
+  }
+  try {
+    await sql(`DELETE FROM "UserSession" WHERE "userId" = $1`, [userId]);
+  } catch {
+    /* ignore */
   }
 }
 

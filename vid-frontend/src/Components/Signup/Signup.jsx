@@ -175,12 +175,12 @@ export default function ModernSignupForm() {
   };
 
   const inputBase =
-    "w-full px-4 py-3 rounded-lg border bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 text-sm";
-  const inputOk = "border-gray-300 focus:border-indigo-500 focus:ring-indigo-200";
+    "w-full px-4 py-3 rounded-lg border bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 text-sm";
+  const inputOk = "border-gray-300 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-200 dark:focus:ring-indigo-900/50";
   const inputErr = "border-red-400 focus:border-red-500 focus:ring-red-200";
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950">
       {/* Left panel */}
       <div className="hidden lg:flex w-1/2 relative bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-700 items-center justify-center p-12">
         <div className="max-w-md text-white space-y-6">
@@ -211,32 +211,32 @@ export default function ModernSignupForm() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-md w-full space-y-6">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Create your account</h2>
-            <p className="mt-1 text-gray-500">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Create your account</h2>
+            <p className="mt-1 text-gray-500 dark:text-slate-400">
               Joining as{" "}
-              <span className="font-medium text-indigo-600">
+              <span className="font-medium text-indigo-600 dark:text-indigo-400">
                 {formData.role === "CLIENT" ? "a Client" : formData.role === "FREELANCER" ? "a Freelancer" : "..."}
               </span>
               {" · "}
-              <Link to="/join" className="text-indigo-600 hover:underline text-sm">Change</Link>
+              <Link to="/join" className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">Change</Link>
             </p>
           </div>
 
           {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
               <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              <p className="text-red-700 text-sm">{serverError}</p>
+              <p className="text-red-700 dark:text-red-300 text-sm">{serverError}</p>
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
               <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <p className="text-green-700 text-sm font-medium">{success}</p>
+              <p className="text-green-700 dark:text-green-300 text-sm font-medium">{success}</p>
             </div>
           )}
 
@@ -244,7 +244,7 @@ export default function ModernSignupForm() {
             {/* Name row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="firstname" className="block text-sm font-medium text-gray-700 mb-1">First name</label>
+                <label htmlFor="firstname" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">First name</label>
                 <input
                   id="firstname"
                   type="text"
@@ -259,7 +259,7 @@ export default function ModernSignupForm() {
                 {fieldErrors.firstname && <p className="mt-1 text-xs text-red-500">{fieldErrors.firstname}</p>}
               </div>
               <div>
-                <label htmlFor="lastname" className="block text-sm font-medium text-gray-700 mb-1">Last name</label>
+                <label htmlFor="lastname" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Last name</label>
                 <input
                   id="lastname"
                   type="text"
@@ -277,7 +277,7 @@ export default function ModernSignupForm() {
 
             {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Email address</label>
               <input
                 id="email"
                 type="email"
@@ -295,7 +295,7 @@ export default function ModernSignupForm() {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Password</label>
               <div className="relative">
                 <input
                   id="password"
@@ -349,7 +349,7 @@ export default function ModernSignupForm() {
 
             {/* Country */}
             <div>
-              <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+              <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Country</label>
               <select
                 id="country"
                 className={`${inputBase} ${fieldErrors.country ? inputErr : inputOk}`}
@@ -378,11 +378,11 @@ export default function ModernSignupForm() {
                 onChange={(e) => handleChange("acceptTerms", e.target.checked)}
                 disabled={loading || !!success}
               />
-              <label htmlFor="accept-terms" className="text-sm text-gray-600 leading-tight">
+              <label htmlFor="accept-terms" className="text-sm text-gray-600 dark:text-slate-400 leading-tight">
                 I agree to the{" "}
-                <a href="#" className="text-indigo-600 hover:underline">Terms of Service</a>{" "}
+                <a href="#" className="text-indigo-600 dark:text-indigo-400 hover:underline">Terms of Service</a>{" "}
                 and{" "}
-                <a href="#" className="text-indigo-600 hover:underline">Privacy Policy</a>
+                <a href="#" className="text-indigo-600 dark:text-indigo-400 hover:underline">Privacy Policy</a>
               </label>
             </div>
 
@@ -407,23 +407,23 @@ export default function ModernSignupForm() {
 
           {/* Divider */}
           <div className="relative">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center text-sm"><span className="bg-gray-50 px-3 text-gray-400">or continue with</span></div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-slate-700" /></div>
+            <div className="relative flex justify-center text-sm"><span className="bg-gray-50 dark:bg-slate-950 px-3 text-gray-400 dark:text-slate-500">or continue with</span></div>
           </div>
 
           {/* Social buttons */}
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-sm font-medium text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
               <FcGoogle className="w-5 h-5" /> Google
             </button>
-            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              <FaApple className="w-5 h-5 text-black" /> Apple
+            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-sm font-medium text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+              <FaApple className="w-5 h-5 text-black dark:text-white" /> Apple
             </button>
           </div>
 
-          <p className="text-center text-sm text-gray-500">
+          <p className="text-center text-sm text-gray-500 dark:text-slate-400">
             Already have an account?{" "}
-            <Link to="/login" className="text-indigo-600 font-medium hover:underline">Log in</Link>
+            <Link to="/login" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Log in</Link>
           </p>
         </div>
       </div>

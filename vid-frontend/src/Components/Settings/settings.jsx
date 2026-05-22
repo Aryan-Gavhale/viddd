@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { motion, AnimatePresence } from "framer-motion"
 import { Check, ChevronRight, X, Save, SettingsIcon } from "lucide-react"
 
@@ -13,6 +14,7 @@ import { PrivacySettings } from "./privacy-settings"
 import { cn } from "../../lib/utils"
 
 export default function Settings() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState("profile")
   const [saved, setSaved] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -29,14 +31,14 @@ export default function Settings() {
   }
 
   const tabs = [
-    { id: "profile", label: "Profile" },
-    { id: "account", label: "Account & Security" },
-    { id: "notifications", label: "Notifications" },
-    { id: "payment", label: "Payment"},
-    { id: "gigs", label: "Gig Preferences" },
-    { id: "video", label: "Video Tools" },
-    { id: "appearance", label: "Appearance" },
-    { id: "privacy", label: "Privacy & Data" },
+    { id: "profile", label: t("settings.tabs.profile", "Profile") },
+    { id: "account", label: t("settings.tabs.account", "Account & Security") },
+    { id: "notifications", label: t("settings.tabs.notifications", "Notifications") },
+    { id: "payment", label: t("settings.tabs.payment", "Payment") },
+    { id: "gigs", label: t("settings.tabs.gigs", "Gig Preferences") },
+    { id: "video", label: t("settings.tabs.video", "Video Tools") },
+    { id: "appearance", label: t("settings.tabs.appearance", "Appearance") },
+    { id: "privacy", label: t("settings.tabs.privacy", "Privacy & Data") },
   ]
 
   return (
@@ -47,8 +49,8 @@ export default function Settings() {
             <SettingsIcon className="h-6 w-6 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-            <p className="mt-1 text-gray-500 dark:text-gray-400">Manage your account settings and preferences</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t("settings.title", "Settings")}</h1>
+            <p className="mt-1 text-gray-500 dark:text-gray-400">{t("settings.subtitle", "Manage your account settings and preferences")}</p>
           </div>
         </div>
         <div className="relative">
@@ -58,12 +60,12 @@ export default function Settings() {
           >
             {saved ? (
               <motion.span initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center">
-                <Check className="mr-2 h-4 w-4" /> Saved
+                <Check className="mr-2 h-4 w-4" /> {t("common.saved", "Saved")}
               </motion.span>
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                <span>Save Changes</span>
+                <span>{t("common.saveChanges", "Save Changes")}</span>
               </>
             )}
           </button>
@@ -107,9 +109,9 @@ export default function Settings() {
             ))}
 
             <div className="mt-8 rounded-lg border border-dashed border-violet-300 dark:border-violet-800 p-4 text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Need help with settings?</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t("settings.helpPrompt", "Need help with settings?")}</p>
               <button className="mt-2 text-sm font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
-                Contact Support
+                {t("settings.contactSupport", "Contact Support")}
               </button>
             </div>
           </div>
@@ -190,15 +192,15 @@ export default function Settings() {
                 <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-violet-50 border border-violet-200 dark:bg-violet-900/30 dark:border-violet-800">
                   <Check className="h-10 w-10 text-violet-600 dark:text-violet-400" />
                 </div>
-                <h3 className="mb-2 text-xl font-bold">Settings Saved!</h3>
+                <h3 className="mb-2 text-xl font-bold">{t("settings.savedTitle", "Settings Saved!")}</h3>
                 <p className="mb-6 text-gray-500 dark:text-gray-400">
-                  Your changes have been successfully saved and applied to your account.
+                  {t("settings.savedBody", "Your changes have been successfully saved and applied to your account.")}
                 </p>
                 <button
                   onClick={() => setShowModal(false)}
                   className="rounded-md bg-violet-600 hover:bg-violet-700 px-6 py-2.5 text-white border border-violet-700 transition-all hover:shadow-[0_0_15px_rgba(124,58,237,0.5)] active:scale-95"
                 >
-                  Continue
+                  {t("common.continue", "Continue")}
                 </button>
               </div>
             </motion.div>

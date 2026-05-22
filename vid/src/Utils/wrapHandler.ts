@@ -72,14 +72,38 @@ type LooseExpressHandler = (
 /**
  * Wraps an Express route handler (req, res, next) for Fastify.
  * Controllers need ZERO changes.
+ *
+ * The legacy implementation made `next(err)` `throw err`, which meant that
+ * any controller using the very common Express pattern
+ *
+ *     try { ...; if (cond) return next(new ApiError(400, "...")); }
+ *     catch (e) { return next(new ApiError(500, "...")); }
+ *
+ * silently turned every 4xx into a 500 (the inner throw was caught by the
+ * surrounding catch and re-routed). To preserve those status codes we now
+ * stash the error on the closure, and after the handler returns we throw
+ * the stashed error if no response was sent. The outer try/catch in the
+ * controller does not see the throw, so 4xx propagates as intended.
  */
 export function wrapHandler(handler: LooseExpressHandler | ExpressHandler) {
   return async function fastifyHandler(request: FastifyRequest, reply: FastifyReply) {
+    let pending: unknown = null;
+    let responseSent = false;
     const next: NextFunction = (err) => {
-      if (err) throw err;
+      if (err) pending = err;
     };
-    const res = createResProxy(reply);
-    return (handler as LooseExpressHandler)(request as ExpressRequest, res, next);
+    const res = createResProxy(reply, () => {
+      responseSent = true;
+    });
+    const result = await (handler as LooseExpressHandler)(
+      request as ExpressRequest,
+      res,
+      next
+    );
+    if (pending && !responseSent) {
+      throw pending;
+    }
+    return result;
   };
 }
 

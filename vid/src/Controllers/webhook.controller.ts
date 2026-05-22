@@ -85,6 +85,15 @@ export const handleStripeWebhook: Handler = async (req, res, next) => {
         case "payment_intent.canceled":
           await handlePaymentCanceled(event.data.object as Stripe.PaymentIntent);
           break;
+        case "payment_method.attached":
+          await handlePaymentMethodAttached(event.data.object as Stripe.PaymentMethod);
+          break;
+        case "payment_method.detached":
+          await handlePaymentMethodDetached(event.data.object as Stripe.PaymentMethod);
+          break;
+        case "account.updated":
+          await handleConnectAccountUpdated(event.data.object as Stripe.Account);
+          break;
         default:
           logger.debug("Unhandled Stripe event: %s", event.type);
       }
@@ -280,4 +289,71 @@ async function handlePaymentCanceled(paymentIntent: Stripe.PaymentIntent) {
   );
 
   logger.info("Payment canceled for transaction %d", found.id as number);
+}
+
+async function handlePaymentMethodAttached(pm: Stripe.PaymentMethod): Promise<void> {
+  const customerId = typeof pm.customer === "string" ? pm.customer : pm.customer?.id;
+  if (!customerId) return;
+  const user = (await sqlOne(
+    `SELECT "id" FROM "User" WHERE "stripeCustomerId" = $1`,
+    [customerId]
+  )) as DbRow | null;
+  if (!user) {
+    logger.warn("payment_method.attached for unknown customer %s", customerId);
+    return;
+  }
+  const card = pm.card;
+  await pool.query(
+    `INSERT INTO "PaymentMethodRecord" ("userId", "stripePaymentMethodId", "brand", "last4", "expMonth", "expYear", "isDefault")
+     VALUES ($1, $2, $3, $4, $5, $6, false)
+     ON CONFLICT ("stripePaymentMethodId")
+     DO UPDATE SET "brand" = EXCLUDED."brand", "last4" = EXCLUDED."last4",
+                   "expMonth" = EXCLUDED."expMonth", "expYear" = EXCLUDED."expYear"`,
+    [user.id, pm.id, card?.brand || null, card?.last4 || null, card?.exp_month || null, card?.exp_year || null]
+  );
+  logger.info("Recorded payment method %s for user %s", pm.id, user.id);
+}
+
+async function handlePaymentMethodDetached(pm: Stripe.PaymentMethod): Promise<void> {
+  await pool.query(
+    `DELETE FROM "PaymentMethodRecord" WHERE "stripePaymentMethodId" = $1`,
+    [pm.id]
+  );
+  logger.info("Removed payment method %s", pm.id);
+}
+
+async function handleConnectAccountUpdated(account: Stripe.Account): Promise<void> {
+  const fp = (await sqlOne(
+    `SELECT * FROM "FreelancerProfile" WHERE "stripeConnectedAccountId" = $1`,
+    [account.id]
+  )) as DbRow | null;
+  if (!fp) {
+    logger.warn("account.updated for unknown connected account %s", account.id);
+    return;
+  }
+  const payoutsEnabled = Boolean(account.payouts_enabled);
+  const onboardingComplete = Boolean(
+    account.details_submitted && account.charges_enabled && account.payouts_enabled
+  );
+  await pool.query(
+    `UPDATE "FreelancerProfile"
+        SET "stripePayoutsEnabled" = $1,
+            "stripeOnboardingComplete" = $2,
+            "stripeRequirementsDue" = $3::jsonb,
+            "updatedAt" = NOW()
+      WHERE "id" = $4`,
+    [
+      payoutsEnabled,
+      onboardingComplete,
+      account.requirements ? JSON.stringify(account.requirements) : null,
+      fp.id,
+    ]
+  );
+  logger.info(
+    "Synced Connect account %s for freelancer %s (payouts=%s, complete=%s)",
+    account.id,
+    fp.id,
+    payoutsEnabled,
+    onboardingComplete
+  );
 }

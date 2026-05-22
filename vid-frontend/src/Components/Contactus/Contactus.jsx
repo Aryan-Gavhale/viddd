@@ -177,19 +177,19 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-950 dark:to-slate-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-700 to-purple-900 sm:text-5xl">
+          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-700 to-purple-900 dark:from-violet-300 dark:to-violet-400 sm:text-5xl">
             Contact Us
           </h1>
           <div className="w-24 h-1 mx-auto mt-4 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full"></div>
-          <p className="mt-6 text-xl text-gray-600">
+          <p className="mt-6 text-xl text-gray-600 dark:text-slate-300">
             We're here to help. Reach out to us with any questions or concerns.
           </p>
         </div>
 
-        <div className="border border-gray-200 rounded-2xl overflow-hidden backdrop-blur-sm bg-white/50">
+        <div className="border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden backdrop-blur-sm bg-white/50 dark:bg-slate-900/50">
           <div className="grid grid-cols-1 lg:grid-cols-3">
             {/* Contact Form */}
             <div className="lg:col-span-2 p-10">
@@ -200,8 +200,8 @@ export default function ContactPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-3">Thank You!</h2>
-                  <p className="text-gray-600 mb-8 max-w-md">
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-3">Thank You!</h2>
+                  <p className="text-gray-600 dark:text-slate-300 mb-8 max-w-md">
                     Your message has been sent successfully. Our team will review it and get back to you as soon as
                     possible.
                   </p>
@@ -215,18 +215,18 @@ export default function ContactPage() {
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {apiError && (
-                    <div className="p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg">
+                    <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg">
                       {apiError}
                     </div>
                   )}
-                  <div className="text-2xl font-semibold text-gray-800 mb-8 border-b border-gray-200 pb-4">
+                  <div className="text-2xl font-semibold text-gray-800 dark:text-slate-100 mb-8 border-b border-gray-200 dark:border-slate-700 pb-4">
                     Tell us about your issue
                   </div>
 
                   {/* Personal Information */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         First Name*
                       </label>
                       <input
@@ -235,15 +235,15 @@ export default function ContactPage() {
                         name="firstName"
                         value={formData.firstName}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                          errors.firstName ? "border-red-500" : "border-gray-200"
+                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                          errors.firstName ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                         }`}
                       />
                       {errors.firstName && <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>}
                     </div>
 
                     <div>
-                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         Last Name*
                       </label>
                       <input
@@ -252,8 +252,8 @@ export default function ContactPage() {
                         name="lastName"
                         value={formData.lastName}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                          errors.lastName ? "border-red-500" : "border-gray-200"
+                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                          errors.lastName ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                         }`}
                       />
                       {errors.lastName && <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>}
@@ -262,7 +262,7 @@ export default function ContactPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         Email Address*
                       </label>
                       <input
@@ -271,15 +271,15 @@ export default function ContactPage() {
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                          errors.email ? "border-red-500" : "border-gray-200"
+                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                          errors.email ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                         }`}
                       />
                       {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
                     </div>
 
                     <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         Phone Number (optional)
                       </label>
                       <input
@@ -288,7 +288,7 @@ export default function ContactPage() {
                         name="phone"
                         value={formData.phone}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 border-gray-200"
+                        className="w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 border-gray-200 dark:border-slate-700"
                       />
                     </div>
                   </div>
@@ -296,7 +296,7 @@ export default function ContactPage() {
                   {/* Issue Details */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         Issue Category
                       </label>
                       <select
@@ -304,8 +304,8 @@ export default function ContactPage() {
                         name="category"
                         value={formData.category}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                          errors.category ? "border-red-500" : "border-gray-200"
+                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                          errors.category ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                         }`}
                       >
                         <option value="TECHNICAL">Technical Problem</option>
@@ -318,7 +318,7 @@ export default function ContactPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                         Priority Level
                       </label>
                       <select
@@ -326,8 +326,8 @@ export default function ContactPage() {
                         name="priority"
                         value={formData.priority}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                          errors.priority ? "border-red-500" : "border-gray-200"
+                        className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                          errors.priority ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                         }`}
                       >
                         <option value="LOW">Low - Not urgent</option>
@@ -340,7 +340,7 @@ export default function ContactPage() {
                   </div>
 
                   <div>
-                    <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="subject" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       Subject*
                     </label>
                     <input
@@ -349,15 +349,15 @@ export default function ContactPage() {
                       name="subject"
                       value={formData.subject}
                       onChange={handleChange}
-                      className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                        errors.subject ? "border-red-500" : "border-gray-200"
+                      className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                        errors.subject ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                       }`}
                     />
                     {errors.subject && <p className="mt-1 text-sm text-red-600">{errors.subject}</p>}
                   </div>
 
                   <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="message" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       Message*
                     </label>
                     <textarea
@@ -366,8 +366,8 @@ export default function ContactPage() {
                       rows={5}
                       value={formData.message}
                       onChange={handleChange}
-                      className={`w-full px-4 py-3 border rounded-lg bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
-                        errors.message ? "border-red-500" : "border-gray-200"
+                      className={`w-full px-4 py-3 border rounded-lg bg-white/70 dark:bg-slate-800/70 dark:text-slate-100 dark:placeholder-slate-500 backdrop-blur-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-300 ${
+                        errors.message ? "border-red-500" : "border-gray-200 dark:border-slate-700"
                       }`}
                       placeholder="Please describe your issue in detail..."
                     ></textarea>
@@ -376,10 +376,10 @@ export default function ContactPage() {
 
                   {/* File Upload */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Photos (Optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Upload Photos (Optional)</label>
                     <div
-                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer bg-white/50 backdrop-blur-sm hover:bg-white/70 transition-all duration-300 ${
-                        errors.files ? "border-red-300" : "border-purple-200"
+                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-white/70 dark:hover:bg-slate-800/70 transition-all duration-300 ${
+                        errors.files ? "border-red-300" : "border-purple-200 dark:border-violet-800"
                       }`}
                       onClick={triggerFileInput}
                     >
@@ -391,11 +391,11 @@ export default function ContactPage() {
                         accept="image/*"
                         multiple
                       />
-                      <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                      <p className="mt-2 text-sm text-gray-600">
-                        <span className="font-medium text-purple-600">Click to upload</span> or drag and drop
+                      <UploadCloud className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500" />
+                      <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">
+                        <span className="font-medium text-purple-600 dark:text-violet-300">Click to upload</span> or drag and drop
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 5MB</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">PNG, JPG, GIF up to 5MB</p>
                     </div>
                     {errors.files && <p className="mt-1 text-sm text-red-600">{errors.files}</p>}
 
@@ -428,7 +428,7 @@ export default function ContactPage() {
 
                   {/* Preferred Contact Method */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Contact Method</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Preferred Contact Method</label>
                     <div className="flex flex-wrap gap-4">
                       <label className="inline-flex items-center">
                         <input
@@ -439,7 +439,7 @@ export default function ContactPage() {
                           onChange={handleChange}
                           className="form-radio h-5 w-5 text-purple-600"
                         />
-                        <span className="ml-2 text-gray-700">Email</span>
+                        <span className="ml-2 text-gray-700 dark:text-slate-300">Email</span>
                       </label>
                       <label className="inline-flex items-center">
                         <input
@@ -450,7 +450,7 @@ export default function ContactPage() {
                           onChange={handleChange}
                           className="form-radio h-5 w-5 text-purple-600"
                         />
-                        <span className="ml-2 text-gray-700">Phone</span>
+                        <span className="ml-2 text-gray-700 dark:text-slate-300">Phone</span>
                       </label>
                       <label className="inline-flex items-center">
                         <input
@@ -461,7 +461,7 @@ export default function ContactPage() {
                           onChange={handleChange}
                           className="form-radio h-5 w-5 text-purple-600"
                         />
-                        <span className="ml-2 text-gray-700">Either</span>
+                        <span className="ml-2 text-gray-700 dark:text-slate-300">Either</span>
                       </label>
                     </div>
                     {errors.contactMethod && <p className="mt-1 text-sm text-red-600">{errors.contactMethod}</p>}

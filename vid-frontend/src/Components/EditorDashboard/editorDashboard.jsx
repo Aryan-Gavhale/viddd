@@ -32,14 +32,17 @@ import {
   X
 } from "lucide-react";
 import axiosInstance from "../../utils/axios";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { SkeletonDashboard } from "../Skeleton";
+import { selectResolvedTheme, setAppearance } from "../../redux/preferencesSlice";
 
 export default function VideoEditorDashboard() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const resolvedTheme = useSelector(selectResolvedTheme);
+  const darkMode = resolvedTheme === "dark";
   const [activeTab, setActiveTab] = useState("current");
   const [activeJobTab, setActiveJobTab] = useState("currentJobs");
-  const [darkMode, setDarkMode] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [currentOrders, setCurrentOrders] = useState([]);
   const [pendingOrders, setPendingOrders] = useState([]);
@@ -60,8 +63,7 @@ export default function VideoEditorDashboard() {
   const user = useSelector((state) => state.user);
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle("dark", !darkMode);
+    dispatch(setAppearance({ theme: darkMode ? "light" : "dark" }));
   };
 
   useEffect(() => {

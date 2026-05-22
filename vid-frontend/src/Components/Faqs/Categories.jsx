@@ -63,16 +63,16 @@ export default function Categories({ onCategoryChange }) {
   }
 
   return (
-    <div className="mb-12 border-b border-gray-200">
+    <div className="mb-12 border-b border-gray-200 dark:border-slate-700">
       <nav className="flex space-x-8" aria-label="FAQ Categories">
         {categories.map((category) => (
           <button
             key={category.id}
             onClick={() => handleCategoryChange(category.id)}
-            className={`relative pb-4 text-sm font-medium transition-colors hover:text-gray-900 ${
+            className={`relative pb-4 text-sm font-medium transition-colors hover:text-gray-900 dark:hover:text-slate-100 ${
               activeCategory === category.id
-                ? 'text-blue-600'
-                : 'text-gray-500'
+                ? 'text-blue-600 dark:text-blue-300'
+                : 'text-gray-500 dark:text-slate-400'
             }`}
           >
             {category.name}

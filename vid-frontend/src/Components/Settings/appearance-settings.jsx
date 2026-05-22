@@ -1,183 +1,220 @@
+import { useEffect, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
+import { Sun, Moon, Monitor, Palette, Loader2, Save, Type, Languages } from "lucide-react";
+import { toast } from "react-toastify";
+import { fetchPreferences, updatePreferences } from "../../services/settingsApi";
+import {
+  selectAppearance,
+  setAppearance,
+  setFromServer,
+} from "../../redux/preferencesSlice";
+import { SUPPORTED_LANGUAGES } from "../../i18n/languages";
 
-import { Moon, Sun, Palette, Languages, Type } from "lucide-react"
+const THEMES = [
+  { value: "light", labelKey: "settings.appearance.themeLight", fallback: "Light", icon: Sun },
+  { value: "dark", labelKey: "settings.appearance.themeDark", fallback: "Dark", icon: Moon },
+  { value: "system", labelKey: "settings.appearance.themeSystem", fallback: "System", icon: Monitor },
+];
+
+const ACCENTS = ["violet", "indigo", "blue", "emerald", "rose", "amber"];
+
+const FONT_SIZES = [
+  { value: "small", labelKey: "settings.appearance.sizeSmall", fallback: "Small" },
+  { value: "medium", labelKey: "settings.appearance.sizeMedium", fallback: "Medium" },
+  { value: "large", labelKey: "settings.appearance.sizeLarge", fallback: "Large" },
+];
 
 export function AppearanceSettings() {
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const appearance = useSelector(selectAppearance);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const lastSavedRef = useRef(appearance);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const data = await fetchPreferences();
+        if (active && data?.appearance) {
+          dispatch(setFromServer(data.appearance));
+          lastSavedRef.current = data.appearance;
+        }
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Failed to load appearance");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [dispatch]);
+
+  // Optimistic update — every picker dispatches into the slice so the
+  // AppearanceProvider's effects fire immediately. Save then persists
+  // the new state to the backend; on failure we revert to whatever
+  // the server last confirmed.
+  const set = (k, v) => dispatch(setAppearance({ [k]: v }));
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const res = await updatePreferences({ appearance });
+      if (res?.appearance) {
+        dispatch(setFromServer(res.appearance));
+        lastSavedRef.current = res.appearance;
+      } else {
+        lastSavedRef.current = appearance;
+      }
+      toast.success(t("settings.appearance.saved", "Appearance saved"));
+    } catch (err) {
+      toast.error(err?.response?.data?.message || t("settings.appearance.saveFailed", "Failed to save"));
+      dispatch(setFromServer(lastSavedRef.current));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-500 dark:text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> {t("common.loading", "Loading…")}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
-      <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4">
-        <h2 className="text-xl font-bold text-violet-900 dark:text-violet-100">Appearance</h2>
-        <p className="text-violet-600 dark:text-violet-400 text-sm">Customize how Vidlancing looks and feels</p>
-      </div>
-      <div className="p-6">
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-violet-600 mr-2 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                <Sun className="h-3.5 w-3.5" />
-              </div>
-              Theme
-            </h4>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="relative overflow-hidden rounded-lg border-2 border-violet-100 bg-white p-1 hover:border-violet-500 dark:border-violet-800 dark:bg-gray-800">
-                <div className="space-y-2 rounded-md p-2">
-                  <div className="space-y-2 rounded-md bg-white p-2 shadow-sm">
-                    <div className="h-2 w-[80px] rounded-lg bg-gray-200" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-white p-2 shadow-sm">
-                    <div className="h-4 w-4 rounded-full bg-gray-200" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-white p-2 shadow-sm">
-                    <div className="h-4 w-4 rounded-full bg-gray-200" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200" />
-                  </div>
-                </div>
-                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-white">
-                  <Sun className="h-3 w-3" />
-                </span>
-                <span className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white to-white/20 text-center text-sm font-medium">
-                  Light
-                </span>
-              </div>
-              <div className="relative overflow-hidden rounded-lg border-2 border-violet-100 bg-white p-1 hover:border-violet-500 dark:border-violet-800 dark:bg-gray-800">
-                <div className="space-y-2 rounded-md bg-slate-950 p-2">
-                  <div className="space-y-2 rounded-md bg-slate-800 p-2 shadow-sm">
-                    <div className="h-2 w-[80px] rounded-lg bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-slate-700" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-slate-800 p-2 shadow-sm">
-                    <div className="h-4 w-4 rounded-full bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-slate-700" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-slate-800 p-2 shadow-sm">
-                    <div className="h-4 w-4 rounded-full bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-slate-700" />
-                  </div>
-                </div>
-                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-white">
-                  <Moon className="h-3 w-3" />
-                </span>
-                <span className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-slate-950 to-slate-950/20 text-center text-sm font-medium text-slate-50">
-                  Dark
-                </span>
-              </div>
-              <div className="relative overflow-hidden rounded-lg border-2 border-violet-500 bg-white p-1 dark:border-violet-500 dark:bg-gray-800">
-                <div className="space-y-2 rounded-md p-2">
-                  <div className="space-y-2 rounded-md bg-gray-100 p-2 shadow-sm dark:bg-slate-800">
-                    <div className="h-2 w-[80px] rounded-lg bg-gray-200 dark:bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200 dark:bg-slate-700" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-gray-100 p-2 shadow-sm dark:bg-slate-800">
-                    <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200 dark:bg-slate-700" />
-                  </div>
-                  <div className="flex items-center space-x-2 rounded-md bg-gray-100 p-2 shadow-sm dark:bg-slate-800">
-                    <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-slate-700" />
-                    <div className="h-2 w-[100px] rounded-lg bg-gray-200 dark:bg-slate-700" />
-                  </div>
-                </div>
-                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-white">
-                  <svg
-                    className="h-3 w-3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M12 2v20M2 12h20" />
-                  </svg>
-                </span>
-                <span className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white to-white/20 text-center text-sm font-medium dark:from-slate-950 dark:to-slate-950/20">
-                  System
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4 pt-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-violet-600 mr-2 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                <Palette className="h-3.5 w-3.5" />
-              </div>
-              Accent Color
-            </h4>
-            <div className="grid grid-cols-3 gap-4">
-              <label className="cursor-pointer">
-                <input type="radio" name="accent" value="violet" className="peer sr-only" defaultChecked />
-                <div className="flex items-center justify-between rounded-md border-2 border-violet-100 p-4 transition-all peer-checked:border-violet-500 peer-checked:ring-2 peer-checked:ring-violet-500 peer-checked:ring-offset-2 dark:border-violet-800 dark:peer-checked:ring-offset-gray-900">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Violet</span>
-                  <div className="h-6 w-6 rounded-full bg-violet-500" />
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input type="radio" name="accent" value="blue" className="peer sr-only" />
-                <div className="flex items-center justify-between rounded-md border-2 border-violet-100 p-4 transition-all peer-checked:border-violet-500 peer-checked:ring-2 peer-checked:ring-violet-500 peer-checked:ring-offset-2 dark:border-violet-800 dark:peer-checked:ring-offset-gray-900">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Blue</span>
-                  <div className="h-6 w-6 rounded-full bg-blue-500" />
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input type="radio" name="accent" value="green" className="peer sr-only" />
-                <div className="flex items-center justify-between rounded-md border-2 border-violet-100 p-4 transition-all peer-checked:border-violet-500 peer-checked:ring-2 peer-checked:ring-violet-500 peer-checked:ring-offset-2 dark:border-violet-800 dark:peer-checked:ring-offset-gray-900">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Green</span>
-                  <div className="h-6 w-6 rounded-full bg-green-500" />
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div className="space-y-4 pt-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-violet-600 mr-2 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                <Languages className="h-3.5 w-3.5" />
-              </div>
-              Language
-            </h4>
-            <select className="w-full rounded-md border border-violet-200 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-violet-700 dark:bg-violet-900/20 dark:text-gray-200">
-              <option value="en" selected>
-                English
-              </option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-              <option value="pt">Português</option>
-              <option value="ja">日本語</option>
-            </select>
-          </div>
-
-          <div className="space-y-4 pt-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-violet-600 mr-2 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                <Type className="h-3.5 w-3.5" />
-              </div>
-              Font Size
-            </h4>
-            <div className="grid grid-cols-3 gap-4">
-              <label className="cursor-pointer">
-                <input type="radio" name="font-size" value="small" className="peer sr-only" />
-                <div className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-violet-100 bg-white p-4 transition-all peer-checked:border-violet-500 dark:border-violet-700 dark:bg-violet-900/20">
-                  <span className="text-xs font-medium text-gray-900 dark:text-white">Small</span>
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input type="radio" name="font-size" value="medium" className="peer sr-only" defaultChecked />
-                <div className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-violet-100 bg-white p-4 transition-all peer-checked:border-violet-500 dark:border-violet-700 dark:bg-violet-900/20">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Medium</span>
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input type="radio" name="font-size" value="large" className="peer sr-only" />
-                <div className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-violet-100 bg-white p-4 transition-all peer-checked:border-violet-500 dark:border-violet-700 dark:bg-violet-900/20">
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Large</span>
-                </div>
-              </label>
-            </div>
-          </div>
+      <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-violet-900 dark:text-violet-100">
+            {t("settings.appearance.title", "Appearance")}
+          </h2>
+          <p className="text-violet-600 dark:text-violet-400 text-sm">
+            {t("settings.appearance.subtitle", "Personalise how Vidlancing looks for you")}
+          </p>
         </div>
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-white text-sm hover:bg-violet-700 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t("common.save", "Save")}
+        </button>
+      </div>
+
+      <div className="p-6 space-y-6">
+        <Section
+          icon={<Palette className="h-4 w-4 text-violet-500" />}
+          title={t("settings.appearance.theme", "Theme")}
+        >
+          <div className="grid grid-cols-3 gap-3">
+            {THEMES.map((th) => {
+              const Icon = th.icon;
+              const active = appearance.theme === th.value;
+              return (
+                <button
+                  key={th.value}
+                  onClick={() => set("theme", th.value)}
+                  className={`rounded-lg border px-4 py-3 flex flex-col items-center gap-2 text-sm transition-colors ${
+                    active
+                      ? "border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                      : "border-violet-100 dark:border-violet-800/50 text-gray-700 dark:text-slate-300 hover:bg-violet-50/50 dark:hover:bg-violet-900/10"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {t(th.labelKey, th.fallback)}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        <Section
+          icon={<Palette className="h-4 w-4 text-violet-500" />}
+          title={t("settings.appearance.accent", "Accent color")}
+        >
+          <div className="flex flex-wrap gap-2">
+            {ACCENTS.map((c) => (
+              <button
+                key={c}
+                onClick={() => set("accentColor", c)}
+                className={`h-10 w-10 rounded-full border-2 transition-transform hover:scale-105 ${
+                  appearance.accentColor === c
+                    ? "border-gray-900 dark:border-white"
+                    : "border-transparent"
+                }`}
+                style={{ background: cssAccent(c) }}
+                aria-label={c}
+                title={c}
+              />
+            ))}
+          </div>
+        </Section>
+
+        <Section
+          icon={<Type className="h-4 w-4 text-violet-500" />}
+          title={t("settings.appearance.fontSize", "Font size")}
+        >
+          <select
+            value={appearance.fontSize || "medium"}
+            onChange={(e) => set("fontSize", e.target.value)}
+            className="w-full md:w-64 rounded-md border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 px-3 py-2 text-sm"
+          >
+            {FONT_SIZES.map((f) => (
+              <option key={f.value} value={f.value}>
+                {t(f.labelKey, f.fallback)}
+              </option>
+            ))}
+          </select>
+        </Section>
+
+        <Section
+          icon={<Languages className="h-4 w-4 text-violet-500" />}
+          title={t("settings.appearance.language", "Language")}
+        >
+          <select
+            value={appearance.language || "en"}
+            onChange={(e) => set("language", e.target.value)}
+            className="w-full md:w-64 rounded-md border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 px-3 py-2 text-sm"
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.nativeName}
+              </option>
+            ))}
+          </select>
+        </Section>
       </div>
     </div>
-  )
+  );
+}
+
+function Section({ icon, title, children }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="flex items-center text-sm font-medium text-gray-700 dark:text-slate-300">
+        {icon}
+        <span className="ml-2">{title}</span>
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function cssAccent(name) {
+  return (
+    {
+      violet: "#7c3aed",
+      indigo: "#4f46e5",
+      blue: "#2563eb",
+      emerald: "#10b981",
+      rose: "#e11d48",
+      amber: "#d97706",
+    }[name] || "#7c3aed"
+  );
 }

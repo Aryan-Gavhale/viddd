@@ -14,9 +14,9 @@ export default function Timeline() {
     return (
       <section className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 transform skew-y-3 -z-10"></div>
-        <div className="relative bg-white shadow-xl rounded-lg overflow-hidden">
+        <div className="relative bg-white dark:bg-slate-900 shadow-xl dark:shadow-black/40 rounded-lg overflow-hidden">
           <div className="px-4 py-8 sm:p-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Our Journey</h2>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-8 text-center">Our Journey</h2>
             <div className="flex flex-col space-y-8">
               {milestones.map((milestone, index) => (
                 <div key={index} className="flex items-center space-x-4">
@@ -25,7 +25,7 @@ export default function Timeline() {
                   </div>
                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-600"></div>
                   <div className="flex-grow">
-                    <p className="text-lg text-gray-700">{milestone.event}</p>
+                    <p className="text-lg text-gray-700 dark:text-slate-300">{milestone.event}</p>
                   </div>
                 </div>
               ))}

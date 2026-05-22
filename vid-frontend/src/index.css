@@ -1,6 +1,17 @@
+@import "./styles/accents.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900 transition-colors duration-200;
+  }
+  html.dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
 
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
@@ -146,7 +157,7 @@
     font-style: italic;
   }
   
-  const styles = @keyframes fadeIn {
+@keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }

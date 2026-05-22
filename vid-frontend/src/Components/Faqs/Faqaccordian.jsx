@@ -25,17 +25,17 @@ export default function FAQAccordion({ faqs }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
-            className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm"
+            className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm dark:shadow-black/40"
           >
             <button
-              className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-inset"
+              className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-700 focus:ring-inset"
               onClick={() => toggleAccordion(index)}
             >
-              <span className="text-base font-medium text-gray-900">{faq.question}</span>
+              <span className="text-base font-medium text-gray-900 dark:text-slate-100">{faq.question}</span>
               <div className={`ml-4 flex-shrink-0 transform transition-transform duration-200 ${
                 activeIndex === index ? 'rotate-180' : ''
               }`}>
-                <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 text-gray-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
@@ -48,8 +48,8 @@ export default function FAQAccordion({ faqs }) {
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="border-t border-gray-100 px-6 py-4">
-                    <p className="text-base text-gray-600">{faq.answer}</p>
+                  <div className="border-t border-gray-100 dark:border-slate-700 px-6 py-4">
+                    <p className="text-base text-gray-600 dark:text-slate-300">{faq.answer}</p>
                   </div>
                 </motion.div>
               )}

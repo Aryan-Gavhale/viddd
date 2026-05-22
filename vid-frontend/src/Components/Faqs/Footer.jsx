@@ -3,13 +3,13 @@ import { MessageCircle } from 'lucide-react'
 
 export default function Footer() {
   return (
-    <footer className="border-t border-gray-200 bg-white">
+    <footer className="border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <div className="container mx-auto px-4 py-12 text-center">
         <div className="mx-auto max-w-lg">
-          <h3 className="mb-4 text-2xl font-semibold text-gray-900">
+          <h3 className="mb-4 text-2xl font-semibold text-gray-900 dark:text-slate-100">
             Still need help?
           </h3>
-          <p className="mb-8 text-gray-600">
+          <p className="mb-8 text-gray-600 dark:text-slate-300">
             Can't find what you're looking for? Our support team is here to help you with any questions or concerns.
           </p>
           <Link

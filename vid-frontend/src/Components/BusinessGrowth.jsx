@@ -2,7 +2,7 @@ import { TrendingUp, Users, Globe, Target } from "lucide-react"
 
 export default function GrowthSection() {
   return (
-    <div className="py-16 px-4 sm:px-6 lg:px-8 bg-white">
+    <div className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-slate-950">
       <div className="max-w-7xl mx-auto">
         <div className="rounded-[32px] bg-gradient-to-br from-teal-950 via-emerald-950 to-gray-900 p-8 md:p-12 overflow-hidden relative">
           {/* Gradient accents */}

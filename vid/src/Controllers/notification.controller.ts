@@ -3,8 +3,20 @@ import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import { sql, sqlOne, sqlCount } from "../db.js";
 import logger from "../Utils/logger.js";
+import { ensureNotificationPreference } from "../Services/settingsDefaults.service.js";
 import type { ExpressRequest, ExpressResponse, NextFunction } from "../types/index.js";
 import type { DbRow, NotificationRow } from "../types/index.js";
+
+const NOTIFICATION_PREF_FIELDS = [
+  "notifyJobInvitations",
+  "notifyMessages",
+  "notifyPaymentUpdates",
+  "notifyPlatformNews",
+  "notifyMarketing",
+  "emailFrequency",
+  "pushEnabled",
+  "inAppEnabled",
+] as const;
 
 type ControllerHandler = (
   req: ExpressRequest,
@@ -342,6 +354,96 @@ const deleteReadNotifications: ControllerHandler = async (req, res, next) => {
   }
 };
 
+// ── Notification preferences (Settings tab) ────────────────────────────
+const getNotificationPreferences: ControllerHandler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) return next(new ApiError(401, "Unauthorized"));
+    const prefs = await ensureNotificationPreference(req.user.id);
+    return res.status(200).json(new ApiResponse(200, prefs, "Preferences fetched"));
+  } catch (err) {
+    logger.error("getNotificationPreferences: %s", (err as Error).message);
+    return next(new ApiError(500, "Failed to fetch preferences"));
+  }
+};
+
+const updateNotificationPreferences: ControllerHandler = async (req, res, next) => {
+  try {
+    if (!req.user?.id) return next(new ApiError(401, "Unauthorized"));
+    const userId = req.user.id;
+    await ensureNotificationPreference(userId);
+    const body = (req.body as Record<string, unknown>) || {};
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    let p = 1;
+    for (const k of NOTIFICATION_PREF_FIELDS) {
+      if (k in body) {
+        sets.push(`"${k}" = $${p++}`);
+        vals.push(body[k]);
+      }
+    }
+    if (sets.length === 0) {
+      return next(new ApiError(400, "No fields to update"));
+    }
+    vals.push(userId);
+    await sql(
+      `UPDATE "NotificationPreference" SET ${sets.join(", ")}, "updatedAt" = NOW() WHERE "userId" = $${p}`,
+      vals
+    );
+    const fresh = await ensureNotificationPreference(userId);
+    return res.status(200).json(new ApiResponse(200, fresh, "Preferences updated"));
+  } catch (err) {
+    logger.error("updateNotificationPreferences: %s", (err as Error).message);
+    return next(new ApiError(500, "Failed to update preferences"));
+  }
+};
+
+/**
+ * Helper used by `Queues/processors.ts` and `delivery.controller.ts` to
+ * decide whether a notification should be sent right now (vs. deferred to a
+ * digest) and through which channels. Returns a structured decision so
+ * call sites can `if (!decision.email) skip` etc.
+ *
+ * `category` maps the in-app notification type to the per-channel toggle.
+ */
+export type NotificationCategory =
+  | "JOB_INVITATIONS"
+  | "MESSAGES"
+  | "PAYMENT_UPDATES"
+  | "PLATFORM_NEWS"
+  | "MARKETING";
+
+export interface NotificationDeliveryDecision {
+  email: boolean;
+  inApp: boolean;
+  push: boolean;
+  emailFrequency: "instant" | "daily" | "weekly";
+}
+
+const CATEGORY_FIELD: Record<NotificationCategory, (typeof NOTIFICATION_PREF_FIELDS)[number]> = {
+  JOB_INVITATIONS: "notifyJobInvitations",
+  MESSAGES: "notifyMessages",
+  PAYMENT_UPDATES: "notifyPaymentUpdates",
+  PLATFORM_NEWS: "notifyPlatformNews",
+  MARKETING: "notifyMarketing",
+};
+
+export async function resolveNotificationDecision(
+  userId: number,
+  category: NotificationCategory
+): Promise<NotificationDeliveryDecision> {
+  const prefs = await ensureNotificationPreference(userId);
+  const allowed = Boolean(prefs[CATEGORY_FIELD[category]]);
+  return {
+    email: allowed,
+    inApp: allowed && prefs.inAppEnabled !== false,
+    push: allowed && prefs.pushEnabled !== false,
+    emailFrequency: ((prefs.emailFrequency as string) || "instant") as
+      | "instant"
+      | "daily"
+      | "weekly",
+  };
+}
+
 export {
   createNotification,
   getNotifications,
@@ -350,4 +452,6 @@ export {
   deleteNotification,
   markAllNotificationsAsRead,
   deleteReadNotifications,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 };

@@ -1,234 +1,481 @@
-
-
-import { useState } from "react"
-import { AlertCircle, Smartphone, Shield, Mail, Key, LinkIcon } from "lucide-react"
+import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  Smartphone,
+  Shield,
+  Mail,
+  Key,
+  LinkIcon,
+  Loader2,
+  Trash2,
+  Youtube,
+  Linkedin,
+} from "lucide-react";
+import { toast } from "react-toastify";
+import {
+  fetchMe,
+  changePassword,
+  requestEmailChange,
+  get2faStatus,
+  setup2fa,
+  verify2faSetup,
+  disable2fa,
+  listSessions,
+  revokeSession,
+  revokeAllOtherSessions,
+  listConnectedAccounts,
+  startOAuthConnect,
+  disconnectAccount,
+} from "../../services/settingsApi";
 
 export function AccountSettings() {
-  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
-  const [password, setPassword] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
+  const [me, setMe] = useState(null);
+  const [twofa, setTwofa] = useState({ enabled: false });
+  const [sessions, setSessions] = useState([]);
+  const [connected, setConnected] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  // Read-only data
-  const userData = {
-    email: "john.doe@example.com",
+  const refresh = async () => {
+    try {
+      const [m, t, s, c] = await Promise.all([
+        fetchMe().catch(() => null),
+        get2faStatus().catch(() => ({ enabled: false })),
+        listSessions().catch(() => ({ sessions: [] })),
+        listConnectedAccounts().catch(() => ({})),
+      ]);
+      setMe(m);
+      setTwofa(t || { enabled: false });
+      setSessions(s?.sessions || []);
+      setConnected(c || {});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-500">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+      </div>
+    );
   }
 
   return (
-    <>
-      <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
-        <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4">
-          <h2 className="text-xl font-bold text-violet-900 dark:text-violet-100">Account & Security</h2>
-          <p className="text-violet-600 dark:text-violet-400 text-sm">
-            Manage your login information and account security settings
-          </p>
-        </div>
-        <div className="p-6">
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <Mail className="h-4 w-4 mr-2 text-violet-500" />
-                  Email Address
-                </label>
-                <div className="rounded-lg border border-violet-100 bg-violet-50/50 px-4 py-3 text-gray-800 dark:border-violet-800/50 dark:bg-violet-900/10 dark:text-gray-200 flex items-center justify-between">
-                  <span>{userData.email}</span>
-                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/50">
-                    Verified
-                  </span>
-                </div>
-              </div>
+    <div className="space-y-6">
+      <EmailCard email={me?.email} verified={me?.emailVerified} onChanged={refresh} />
+      <PasswordCard />
+      <TwoFactorCard status={twofa} onChanged={() => refresh()} />
+      <SessionsCard
+        sessions={sessions}
+        onRevoke={async (jti) => {
+          await revokeSession(jti).catch((e) =>
+            toast.error(e?.response?.data?.message || "Failed to revoke session")
+          );
+          refresh();
+        }}
+        onRevokeAll={async () => {
+          await revokeAllOtherSessions().catch((e) =>
+            toast.error(e?.response?.data?.message || "Failed to revoke other sessions")
+          );
+          refresh();
+        }}
+      />
+      <ConnectedAccountsCard connected={connected} onChanged={refresh} />
+    </div>
+  );
+}
 
-              <div className="pt-2">
-                <button
-                  onClick={() => setShowChangePasswordModal(true)}
-                  className="flex items-center rounded-md border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
-                >
-                  <Key className="mr-2 h-4 w-4" />
-                  Change Password
-                </button>
-              </div>
-            </div>
+function Card({ title, subtitle, children }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
+      <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4">
+        <h2 className="text-lg font-bold text-violet-900 dark:text-violet-100">{title}</h2>
+        {subtitle && (
+          <p className="text-violet-600 dark:text-violet-400 text-sm">{subtitle}</p>
+        )}
+      </div>
+      <div className="p-6 space-y-4">{children}</div>
+    </div>
+  );
+}
 
-            <div className="space-y-4 pt-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-                      <Shield className="h-4 w-4 mr-2 text-violet-500" />
-                      Two-Factor Authentication
-                    </h4>
-                    <span className="flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/50">
-                      Enabled
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 ml-6">
-                    Add an extra layer of security to your account
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input type="checkbox" defaultChecked className="peer sr-only" />
-                  <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-violet-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none dark:bg-gray-700"></div>
-                </label>
-              </div>
+function EmailCard({ email, verified, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [busy, setBusy] = useState(false);
 
-              <div className="rounded-lg border border-violet-100 bg-violet-50/50 p-4 dark:border-violet-800/50 dark:bg-violet-900/10">
-                <div className="flex items-start gap-4">
-                  <div className="rounded-full bg-violet-100 p-2 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800">
-                    <Smartphone className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-900 dark:text-white">Authenticator App</h5>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Use an authenticator app like Google Authenticator or Authy
-                    </p>
-                    <button className="mt-2 rounded-md bg-white border border-violet-200 px-3 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:bg-violet-800/50 dark:text-violet-300 dark:border-violet-700 dark:hover:bg-violet-800">
-                      Set up
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await requestEmailChange({ newEmail, currentPassword: pwd });
+      toast.success("Verification email sent to your new address");
+      setOpen(false);
+      setNewEmail("");
+      setPwd("");
+      onChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to start email change");
+    } finally {
+      setBusy(false);
+    }
+  };
 
-            <div className="space-y-4 pt-4">
-              <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-                <LinkIcon className="h-4 w-4 mr-2 text-violet-500" />
-                Linked Accounts
-              </h4>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/10">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
-                      <svg className="h-5 w-5 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21.582,6.186c-0.23-0.86-0.908-1.538-1.768-1.768C18.254,4,12,4,12,4S5.746,4,4.186,4.418 c-0.86,0.23-1.538,0.908-1.768,1.768C2,7.746,2,12,2,12s0,4.254,0.418,5.814c0.23,0.86,0.908,1.538,1.768,1.768 C5.746,20,12,20,12,20s6.254,0,7.814-0.418c0.861-0.23,1.538-0.908,1.768-1.768C22,16.254,22,12,22,12S22,7.746,21.582,6.186z M10,15.464V8.536L16,12L10,15.464z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h5 className="font-medium text-gray-900 dark:text-white">YouTube</h5>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Import your videos from YouTube</p>
-                    </div>
-                  </div>
-                  <button className="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-800/50 dark:text-violet-300 dark:hover:bg-violet-800">
-                    Connect
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/10">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M22.2234 0H1.77187C0.792187 0 0 0.773438 0 1.72969V22.2656C0 23.2219 0.792187 24 1.77187 24H22.2234C23.2031 24 24 23.2219 24 22.2703V1.72969C24 0.773438 23.2031 0 22.2234 0ZM7.12031 20.4516H3.55781V8.99531H7.12031V20.4516ZM5.33906 7.43438C4.19531 7.43438 3.27188 6.51094 3.27188 5.37187C3.27188 4.23281 4.19531 3.30937 5.33906 3.30937C6.47813 3.30937 7.40156 4.23281 7.40156 5.37187C7.40156 6.50625 6.47813 7.43438 5.33906 7.43438ZM20.4516 20.4516H16.8937V14.8828C16.8937 13.5562 16.8703 11.8453 15.0422 11.8453C13.1906 11.8453 12.9094 13.2937 12.9094 14.7891V20.4516H9.35625V8.99531H12.7687V10.5609H12.8156C13.2891 9.66094 14.4516 8.70938 16.1813 8.70938C19.7859 8.70938 20.4516 11.0813 20.4516 14.1656V20.4516Z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h5 className="font-medium text-gray-900 dark:text-white">LinkedIn</h5>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Connect to showcase your work history</p>
-                    </div>
-                  </div>
-                  <button className="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-800/50 dark:text-violet-300 dark:hover:bg-violet-800">
-                    Connect
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/20 dark:bg-red-900/10">
-              <div className="flex items-start">
-                <AlertCircle className="mr-3 h-5 w-5 text-red-600 dark:text-red-400" />
-                <div>
-                  <h3 className="text-base font-medium text-red-800 dark:text-red-400">Danger Zone</h3>
-                  <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                    Deactivating your account will remove your profile from search results and make your services
-                    unavailable.
-                  </p>
-                  <button className="mt-3 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600">
-                    Deactivate Account
-                  </button>
-                </div>
-              </div>
-            </div>
+  return (
+    <Card title="Email Address" subtitle="The email used to sign in to Vidlancing">
+      <div className="rounded-lg border border-violet-100 bg-violet-50/50 px-4 py-3 text-gray-800 dark:border-violet-800/50 dark:bg-violet-900/10 dark:text-gray-200 flex items-center justify-between">
+        <span className="flex items-center gap-2">
+          <Mail className="h-4 w-4 text-violet-500" />
+          {email || "—"}
+        </span>
+        <span
+          className={`px-2 py-0.5 text-xs rounded-full border ${
+            verified
+              ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/50"
+              : "bg-amber-100 text-amber-700 border-amber-200"
+          }`}
+        >
+          {verified ? "Verified" : "Unverified"}
+        </span>
+      </div>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-sm text-violet-700 hover:underline"
+        >
+          Change email
+        </button>
+      ) : (
+        <form onSubmit={submit} className="space-y-3 rounded-lg border border-violet-200 p-4">
+          <input
+            type="email"
+            placeholder="New email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            className="w-full rounded-md border border-violet-200 px-3 py-2 text-sm"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Current password"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            className="w-full rounded-md border border-violet-200 px-3 py-2 text-sm"
+            required
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-md bg-violet-600 text-white px-4 py-2 text-sm hover:bg-violet-700 disabled:opacity-60"
+            >
+              {busy ? "Sending…" : "Send confirmation email"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="text-sm text-gray-600">
+              Cancel
+            </button>
           </div>
+        </form>
+      )}
+    </Card>
+  );
+}
+
+function PasswordCard() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (next !== confirm) return toast.error("Passwords do not match");
+    setBusy(true);
+    try {
+      await changePassword({ currentPassword: current, newPassword: next });
+      toast.success("Password changed. Please sign in again.");
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 1200);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to change password");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Password" subtitle="Use a strong password and never reuse it elsewhere">
+      <form onSubmit={submit} className="space-y-3">
+        <Input label="Current password" type="password" value={current} onChange={setCurrent} required />
+        <Input label="New password" type="password" value={next} onChange={setNext} required />
+        <Input label="Confirm new password" type="password" value={confirm} onChange={setConfirm} required />
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex items-center gap-2 rounded-md bg-violet-600 text-white px-4 py-2 text-sm hover:bg-violet-700 disabled:opacity-60"
+        >
+          <Key className="h-4 w-4" />
+          {busy ? "Saving…" : "Update password"}
+        </button>
+      </form>
+    </Card>
+  );
+}
+
+function TwoFactorCard({ status, onChanged }) {
+  const [setupData, setSetupData] = useState(null);
+  const [code, setCode] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const enable = async () => {
+    setBusy(true);
+    try {
+      const data = await setup2fa();
+      setSetupData(data);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to start 2FA setup");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    setBusy(true);
+    try {
+      await verify2faSetup({ code });
+      toast.success("Two-factor authentication enabled");
+      setSetupData(null);
+      setCode("");
+      onChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Invalid code");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    setBusy(true);
+    try {
+      await disable2fa({ currentPassword: pwd, code });
+      toast.success("Two-factor authentication disabled");
+      setCode("");
+      setPwd("");
+      onChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to disable 2FA");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Two-Factor Authentication" subtitle="Authenticator app TOTP (Google Authenticator, 1Password, etc.)">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-violet-500" />
+          <span className="text-sm font-medium">
+            Status:{" "}
+            <span className={status.enabled ? "text-green-600" : "text-gray-500"}>
+              {status.enabled ? "Enabled" : "Disabled"}
+            </span>
+          </span>
         </div>
+        {!status.enabled && !setupData && (
+          <button
+            onClick={enable}
+            disabled={busy}
+            className="rounded-md bg-violet-600 text-white px-4 py-2 text-sm hover:bg-violet-700 disabled:opacity-60"
+          >
+            Enable 2FA
+          </button>
+        )}
       </div>
 
-      {showChangePasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="relative mx-4 max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-violet-200 dark:border-violet-800 dark:bg-slate-900">
-            <button
-              onClick={() => setShowChangePasswordModal(false)}
-              className="absolute right-4 top-4 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5"
-              >
-                <path d="M18 6 6 18"></path>
-                <path d="m6 6 12 12"></path>
-              </svg>
+      {setupData && (
+        <div className="rounded-lg border border-violet-200 p-4 space-y-3">
+          <p className="text-sm text-gray-600">
+            Scan this QR code with your authenticator app, then enter the 6-digit code below.
+          </p>
+          {setupData.qrDataUrl && <img src={setupData.qrDataUrl} alt="2FA QR" className="h-44 w-44" />}
+          {setupData.secret && (
+            <code className="block rounded bg-slate-100 dark:bg-slate-800 p-2 text-xs">
+              Manual key: {setupData.secret}
+            </code>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              maxLength={6}
+              className="rounded-md border border-violet-200 px-3 py-2 text-sm w-32"
+            />
+            <button onClick={verify} disabled={busy} className="rounded-md bg-violet-600 text-white px-4 py-2 text-sm">
+              Verify and enable
             </button>
-
-            <div className="mb-6">
-              <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">Change Password</h3>
-              <p className="text-gray-500 dark:text-gray-400">Create a new secure password for your account</p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-800 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                  placeholder="Enter current password"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">New Password</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-800 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                  placeholder="Enter new password"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Confirm New Password</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-800 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                  placeholder="Confirm new password"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4">
-                <button
-                  onClick={() => setShowChangePasswordModal(false)}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-                <button className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md transition-all hover:bg-violet-700 active:scale-95">
-                  Update Password
-                </button>
-              </div>
-            </div>
+            <button onClick={() => setSetupData(null)} className="text-sm text-gray-600">
+              Cancel
+            </button>
           </div>
         </div>
       )}
-    </>
-  )
+
+      {status.enabled && (
+        <div className="rounded-lg border border-violet-200 p-4 space-y-3">
+          <h4 className="text-sm font-medium">Disable 2FA</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              type="password"
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              placeholder="Current password"
+              className="rounded-md border border-violet-200 px-3 py-2 text-sm"
+            />
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="6-digit code"
+              maxLength={6}
+              className="rounded-md border border-violet-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={disable}
+            disabled={busy}
+            className="text-sm text-red-600 hover:underline"
+          >
+            Disable 2FA
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SessionsCard({ sessions, onRevoke, onRevokeAll }) {
+  return (
+    <Card title="Active Sessions" subtitle="Devices that can sign in with your credentials">
+      {sessions.length === 0 ? (
+        <p className="text-sm text-gray-500">No active sessions.</p>
+      ) : (
+        <ul className="divide-y divide-violet-100">
+          {sessions.map((s) => (
+            <li key={s.refreshJti} className="py-3 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium">
+                  {s.userAgent || "Unknown device"}
+                  {s.current && (
+                    <span className="ml-2 text-xs text-violet-600">(this device)</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {s.ip || "—"} · last seen {new Date(s.lastSeenAt).toLocaleString()}
+                </div>
+              </div>
+              {!s.current && (
+                <button
+                  onClick={() => onRevoke(s.refreshJti)}
+                  className="text-sm text-red-600 hover:underline"
+                >
+                  Revoke
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {sessions.some((s) => !s.current) && (
+        <button
+          onClick={onRevokeAll}
+          className="text-sm text-red-600 hover:underline mt-2"
+        >
+          Sign out of all other sessions
+        </button>
+      )}
+    </Card>
+  );
+}
+
+function ConnectedAccountsCard({ connected, onChanged }) {
+  const start = async (provider) => {
+    try {
+      const data = await startOAuthConnect(provider);
+      if (data?.url) window.location.href = data.url;
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "OAuth not configured");
+    }
+  };
+
+  const disconnect = async (provider) => {
+    try {
+      await disconnectAccount(provider);
+      toast.success("Disconnected");
+      onChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to disconnect");
+    }
+  };
+
+  const Item = ({ icon, name, providerKey }) => {
+    const c = connected?.[providerKey];
+    const isConnected = c?.connected;
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4">
+        <div className="flex items-center gap-3">
+          {icon}
+          <div>
+            <div className="text-sm font-medium">{name}</div>
+            <div className="text-xs text-gray-500">
+              {isConnected ? c?.displayName || "Connected" : "Not connected"}
+            </div>
+          </div>
+        </div>
+        {isConnected ? (
+          <button onClick={() => disconnect(providerKey)} className="text-sm text-red-600 hover:underline">
+            Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={() => start(providerKey)}
+            className="rounded-md bg-violet-600 text-white px-4 py-2 text-sm hover:bg-violet-700"
+          >
+            <LinkIcon className="inline h-4 w-4 mr-1" /> Connect
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card title="Connected Accounts" subtitle="Link external services for one-click publishing and sign-in">
+      <Item icon={<Youtube className="h-5 w-5 text-red-500" />} name="YouTube" providerKey="youtube" />
+      <Item icon={<Linkedin className="h-5 w-5 text-blue-600" />} name="LinkedIn" providerKey="linkedin" />
+    </Card>
+  );
+}
+
+function Input({ label, type = "text", value, onChange, required }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-gray-700 dark:text-gray-300">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full rounded-md border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+      />
+    </div>
+  );
 }

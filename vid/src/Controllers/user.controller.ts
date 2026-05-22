@@ -14,6 +14,8 @@ import crypto from "crypto";
 import { isFreelancerProfileComplete } from "../Utils/profileUtils.js";
 import logger from "../Utils/logger.js";
 import redisClient from "../Config/redis.js";
+import { setMfaSessionIssuer } from "./auth.bridge.js";
+import { issueMfaPendingToken } from "./twoFactor.controller.js";
 import type {
   ExpressRequest,
   ExpressResponse,
@@ -122,6 +124,12 @@ function clearAuthCookies(res: ExpressResponse): void {
   r.clearCookie("refresh_token", { path: REFRESH_COOKIE_PATH });
   r.clearCookie("csrf_token", { path: "/" });
 }
+
+// Register the MFA session-issuer callback so /security/2fa/login can
+// produce the same auth cookies a normal login would.
+setMfaSessionIssuer(async (res, user) => {
+  await issueAuthCookies(res, user as AuthUser);
+});
 
 function mapUserRow(r: DbRow | null): DbRow | null {
   if (!r) return null;
@@ -358,6 +366,30 @@ const loginUser: Handler = async (req, res, next) => {
       } catch {
         /* non-critical */
       }
+    }
+
+    // 2FA gate: if enabled, refuse to issue a session and instead return a
+    // short-lived MFA token. Frontend prompts for a code and POSTs to
+    // /security/2fa/login to finish the login.
+    if (user.twoFactorEnabled) {
+      const { mfaToken, expiresIn } = issueMfaPendingToken(Number(user.id));
+      return res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            mfaRequired: true,
+            mfaToken,
+            expiresIn,
+            user: {
+              id: user.id,
+              firstname: user.firstname,
+              email: user.email,
+              role: user.role,
+            },
+          },
+          "Two-factor authentication required"
+        )
+      );
     }
 
     let freelancerProfile = null;

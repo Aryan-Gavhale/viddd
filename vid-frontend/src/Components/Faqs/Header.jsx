@@ -14,8 +14,8 @@ export default function Header() {
   }
 
   return (
-    <header className="relative overflow-hidden bg-white py-12">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white"></div>
+    <header className="relative overflow-hidden bg-white dark:bg-slate-900 py-12">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/30 dark:to-slate-900"></div>
       <div className="container relative mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -23,10 +23,10 @@ export default function Header() {
           transition={{ duration: 0.5 }}
           className="text-center"
         >
-          <h1 className="mb-4 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-slate-100 sm:text-5xl">
             FAQs & Help Center
           </h1>
-          <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">
+          <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600 dark:text-slate-300">
             Find answers to common questions or get help using our platform.
           </p>
           <motion.form
@@ -37,13 +37,13 @@ export default function Header() {
             className="relative mx-auto max-w-2xl"
           >
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Search for answers..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-full border border-gray-200 bg-white px-12 py-3 text-base shadow-sm transition-shadow duration-200 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-slate-100 px-12 py-3 text-base shadow-sm transition-shadow duration-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-700"
               />
               <button
                 type="submit"

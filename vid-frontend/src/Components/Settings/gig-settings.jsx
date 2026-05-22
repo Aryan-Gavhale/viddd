@@ -1,123 +1,166 @@
+import { useEffect, useState } from "react";
+import { Briefcase, Loader2, Save, Pause, Play, Clock } from "lucide-react";
+import { toast } from "react-toastify";
+import axios from "../../utils/axios";
+import { fetchMe, updateProfile } from "../../services/settingsApi";
 
-import { Clock, PauseCircle, CheckCircle } from "lucide-react"
+const AVAILABILITY = [
+  { value: "FULL_TIME", label: "Full time" },
+  { value: "PART_TIME", label: "Part time" },
+  { value: "UNAVAILABLE", label: "Unavailable" },
+];
 
 export function GigSettings() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
-      <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4">
-        <h2 className="text-xl font-bold text-violet-900 dark:text-violet-100">Gig & Work Preferences</h2>
-        <p className="text-violet-600 dark:text-violet-400 text-sm">Manage your service offerings and availability</p>
+  const [me, setMe] = useState(null);
+  const [gigs, setGigs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const [m, g] = await Promise.all([
+        fetchMe().catch(() => null),
+        axios.get("/gigs/freelancer").then((r) => r?.data?.data ?? r?.data).catch(() => null),
+      ]);
+      setMe(m);
+      setGigs(Array.isArray(g) ? g : g?.gigs || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      await updateProfile({
+        availabilityStatus: me?.freelancerProfile?.availabilityStatus,
+        responseTimeHours: me?.responseTimeHours ?? null,
+      });
+      toast.success("Gig preferences saved");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const togglePause = async (gigId) => {
+    try {
+      await axios.patch(`/gigs/${gigId}/pause`);
+      toast.success("Updated");
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-500">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
       </div>
-      <div className="p-6">
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/10">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-600 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                  <CheckCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-base font-medium text-gray-900 dark:text-white">Availability Status</h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Let clients know if you're currently accepting new work
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-green-600 dark:text-green-400">Available</span>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input type="checkbox" defaultChecked className="peer sr-only" />
-                  <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-violet-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none dark:bg-gray-700"></div>
-                </label>
-              </div>
-            </div>
+    );
+  }
 
-            <div className="rounded-lg border border-violet-100 p-4 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/10">
-              <div className="flex items-start gap-4">
-                <div className="rounded-full bg-violet-100 p-2 border border-violet-200 dark:bg-violet-900/30 dark:border-violet-800">
-                  <Clock className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                </div>
-                <div>
-                  <h5 className="text-sm font-medium text-gray-900 dark:text-white">Response Time Expectation</h5>
-                  <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-                    Set client expectations for how quickly you typically respond
-                  </p>
-                  <select className="w-full rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-violet-700 dark:bg-violet-900/20 dark:text-gray-200">
-                    <option value="1">Within 1 hour</option>
-                    <option value="4" selected>
-                      Within 4 hours
-                    </option>
-                    <option value="24">Within 24 hours</option>
-                    <option value="48">Within 2 days</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+  return (
+    <div className="space-y-6">
+      <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
+        <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-violet-900 dark:text-violet-100">Gig Preferences</h2>
+            <p className="text-violet-600 dark:text-violet-400 text-sm">Availability and response defaults</p>
           </div>
-
-          <div className="space-y-4 pt-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-violet-600 mr-2 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800">
-                <PauseCircle className="h-3.5 w-3.5" />
-              </div>
-              Active Gigs
-            </h4>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4 transition-colors hover:bg-violet-50/50 dark:border-violet-800/50 dark:hover:bg-violet-900/10 bg-white dark:bg-slate-900">
-                <div>
-                  <h5 className="font-medium text-gray-900 dark:text-white">Professional Video Editing</h5>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Starting at $150</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30">
-                    Edit
-                  </button>
-                  <button className="flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-                    <PauseCircle className="mr-1 h-4 w-4" />
-                    Pause
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-violet-100 p-4 transition-colors hover:bg-violet-50/50 dark:border-violet-800/50 dark:hover:bg-violet-900/10 bg-white dark:bg-slate-900">
-                <div>
-                  <h5 className="font-medium text-gray-900 dark:text-white">Motion Graphics & Animation</h5>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Starting at $250</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30">
-                    Edit
-                  </button>
-                  <button className="flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-                    <PauseCircle className="mr-1 h-4 w-4" />
-                    Pause
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <button className="flex w-full items-center justify-center rounded-md border border-violet-300 bg-white px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-2 h-4 w-4"
-              >
-                <path d="M5 12h14"></path>
-                <path d="M12 5v14"></path>
-              </svg>
-              Create New Gig
-            </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-white text-sm hover:bg-violet-700 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save
+          </button>
+        </div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm text-gray-700 dark:text-gray-300">Availability</label>
+            <select
+              value={me?.freelancerProfile?.availabilityStatus || "UNAVAILABLE"}
+              onChange={(e) =>
+                setMe((s) => ({
+                  ...s,
+                  freelancerProfile: { ...(s?.freelancerProfile || {}), availabilityStatus: e.target.value },
+                }))
+              }
+              className="w-full rounded-md border border-violet-200 px-3 py-2 text-sm"
+            >
+              {AVAILABILITY.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="flex items-center text-sm text-gray-700 dark:text-gray-300">
+              <Clock className="h-4 w-4 mr-1 text-violet-500" />
+              Response time (hours)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={720}
+              value={me?.responseTimeHours ?? ""}
+              onChange={(e) =>
+                setMe((s) => ({ ...s, responseTimeHours: e.target.value ? Number(e.target.value) : null }))
+              }
+              className="w-full rounded-md border border-violet-200 px-3 py-2 text-sm"
+            />
           </div>
         </div>
       </div>
+
+      <div className="overflow-hidden rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900">
+        <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-6 py-4">
+          <h2 className="text-lg font-bold text-violet-900 dark:text-violet-100 flex items-center gap-2">
+            <Briefcase className="h-5 w-5 text-violet-500" /> Your gigs
+          </h2>
+        </div>
+        <div className="p-6">
+          {!gigs?.length ? (
+            <p className="text-sm text-gray-500">No gigs yet. Create one from your dashboard.</p>
+          ) : (
+            <ul className="divide-y divide-violet-100">
+              {gigs.map((g) => (
+                <li key={g.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">{g.title || `Gig #${g.id}`}</div>
+                    <div className="text-xs text-gray-500">
+                      Status: {g.status || (g.isPaused ? "PAUSED" : "ACTIVE")}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => togglePause(g.id)}
+                    className="inline-flex items-center gap-1 text-sm text-violet-700 hover:underline"
+                  >
+                    {g.isPaused ? (
+                      <>
+                        <Play className="h-4 w-4" /> Resume
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="h-4 w-4" /> Pause
+                      </>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
-  )
+  );
 }

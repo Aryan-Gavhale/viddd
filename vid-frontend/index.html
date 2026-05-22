@@ -10,6 +10,27 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vidlancing — Video Freelancing Marketplace</title>
+    <script>
+      // Pre-hydration paint: apply persisted appearance to <html> before
+      // React boots so users on dark mode never see a white-flash of
+      // unstyled content on first paint.
+      (function () {
+        try {
+          var raw = localStorage.getItem("appearance");
+          var pref = raw ? JSON.parse(raw) : null;
+          var html = document.documentElement;
+          var theme = (pref && pref.theme) || "system";
+          var dark = theme === "dark" || (theme === "system" && window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) html.classList.add("dark");
+          html.setAttribute("data-accent", (pref && pref.accentColor) || "violet");
+          var sizes = { small: "14px", medium: "16px", large: "18px" };
+          html.style.fontSize = sizes[(pref && pref.fontSize) || "medium"] || "16px";
+          var lang = (pref && pref.language) || localStorage.getItem("language") || "en";
+          html.setAttribute("lang", lang);
+        } catch (_) { /* localStorage blocked / parse failure — defaults stand */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

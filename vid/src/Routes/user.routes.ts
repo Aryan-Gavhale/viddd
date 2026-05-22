@@ -12,10 +12,31 @@ import {
   getAllFreelancers,
   getFreelancerById,
 } from "../Controllers/user.controller.js";
+import {
+  changePassword,
+  requestEmailChange,
+  verifyEmailChange,
+} from "../Controllers/security.controller.js";
+import {
+  getCombinedPreferences,
+  updateCombinedPreferences,
+} from "../Controllers/userPreferences.controller.js";
+import {
+  requestAccountDeletion,
+  cancelAccountDeletion,
+  requestDataExport,
+} from "../Controllers/dataExport.controller.js";
+import { addPortfolioVideo } from "../Controllers/profile.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
 import { uploadSingle } from "../Middlewares/upload.middleware.js";
 import { wrapHandler } from "../Utils/wrapHandler.js";
+import {
+  changePasswordSchema,
+  requestEmailChangeSchema,
+  allPreferencesPatchSchema,
+  deleteRequestSchema,
+} from "../Schemas/settings.schemas.js";
 import Joi from "joi";
 
 const passwordSchema = Joi.string()
@@ -151,4 +172,56 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
     handler: wrapHandler(getAllFreelancers),
   });
   fastify.get("/freelancers/:freelancerId", { preHandler: [authenticateToken], handler: wrapHandler(getFreelancerById) });
+
+  // ── Settings: password + email change + combined preferences ───────────
+  fastify.post("/me/password", {
+    config: { rateLimit: { max: isDev ? 30 : 5, timeWindow: "1 minute" } },
+    preHandler: [authenticateToken, validateBody(changePasswordSchema)],
+    handler: wrapHandler(changePassword),
+  });
+  fastify.post("/me/email/change-request", {
+    config: { rateLimit: { max: isDev ? 30 : 5, timeWindow: "1 hour" } },
+    preHandler: [authenticateToken, validateBody(requestEmailChangeSchema)],
+    handler: wrapHandler(requestEmailChange),
+  });
+  fastify.get("/email/verify-change", { handler: wrapHandler(verifyEmailChange) });
+
+  fastify.get("/me/preferences", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(getCombinedPreferences),
+  });
+  fastify.patch("/me/preferences", {
+    preHandler: [authenticateToken, validateBody(allPreferencesPatchSchema)],
+    handler: wrapHandler(updateCombinedPreferences),
+  });
+
+  // ── Settings: hard delete + GDPR export ─────────────────────────────────
+  fastify.post("/me/delete-request", {
+    config: { rateLimit: { max: 5, timeWindow: "1 hour" } },
+    preHandler: [authenticateToken, validateBody(deleteRequestSchema)],
+    handler: wrapHandler(requestAccountDeletion),
+  });
+  fastify.post("/me/delete-request/cancel", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(cancelAccountDeletion),
+  });
+  fastify.post("/me/export", {
+    config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
+    preHandler: [authenticateToken],
+    handler: wrapHandler(requestDataExport),
+  });
+
+  // ── Phase N: legacy aliases for previously broken paths ─────────────────
+  // Some old client code still hits these older URLs. Rather than ripping
+  // them out one call site at a time we keep thin aliases that delegate to
+  // the canonical handlers.
+  fastify.get("/profile", { preHandler: [authenticateToken], handler: wrapHandler(getUserProfile) });
+  fastify.put("/update", {
+    preHandler: [authenticateToken, uploadSingle("profilePicture"), validateBody(updateUserSchema)],
+    handler: wrapHandler(updateUser),
+  });
+  fastify.post("/me/portfolio", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(addPortfolioVideo),
+  });
 }

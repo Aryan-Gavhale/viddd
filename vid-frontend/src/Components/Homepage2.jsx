@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 export default function WhySection() {
   return (
-    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-white"> {/* Reduced padding on top and bottom */}
+    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-white dark:bg-slate-950"> {/* Reduced padding on top and bottom */}
       <div className="max-w-7xl mx-auto">
         <div className="rounded-[32px] bg-gradient-to-br from-gray-900 via-blue-950 to-gray-900 p-6 md:p-8 overflow-hidden relative"> {/* Reduced padding here */}
           {/* Gradient accents */}

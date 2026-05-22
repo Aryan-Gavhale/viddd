@@ -103,24 +103,24 @@ export default function TrendingGigs() {
   }, [])
 
   return (
-    <section className="py-16 bg-white">
+    <section className="py-16 bg-white dark:bg-slate-950">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Trending Gigs</h2>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Trending Gigs</h2>
           <div className="flex gap-2">
             <button
               onClick={() => scroll("left")}
-              className="p-2.5 rounded-full bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="p-2.5 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               aria-label="Scroll left"
             >
-              <ChevronLeft className="w-5 h-5 text-gray-600" />
+              <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-slate-300" />
             </button>
             <button
               onClick={() => scroll("right")}
-              className="p-2.5 rounded-full bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="p-2.5 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               aria-label="Scroll right"
             >
-              <ChevronRight className="w-5 h-5 text-gray-600" />
+              <ChevronRight className="w-5 h-5 text-gray-600 dark:text-slate-300" />
             </button>
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function TrendingGigs() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <div className="relative bg-white rounded-lg overflow-hidden border border-gray-300 flex flex-col h-full">
+              <div className="relative bg-white dark:bg-slate-900 rounded-lg overflow-hidden border border-gray-300 dark:border-slate-700 flex flex-col h-full">
                 {/* Thumbnail */}
                 <Link href={`/gigs/${gig.id}`} className="block relative aspect-[16/9] overflow-hidden">
                   <img
@@ -169,7 +169,7 @@ export default function TrendingGigs() {
                           className="object-cover h-full w-full"
                         />
                       </div>
-                      <span className="text-base font-medium text-gray-900 group-hover/editor:text-gray-600 transition-colors">
+                      <span className="text-base font-medium text-gray-900 dark:text-slate-100 group-hover/editor:text-gray-600 dark:group-hover/editor:text-slate-400 transition-colors">
                         {gig.editor.name}
                       </span>
                     </Link>
@@ -189,7 +189,7 @@ export default function TrendingGigs() {
 
                   {/* Title */}
                   <Link href={`/gigs/${gig.id}`} className="block group/title mb-2">
-                    <h3 className="text-base text-gray-900 font-medium line-clamp-2 h-12 overflow-hidden leading-snug group-hover/title:text-gray-600 transition-colors">
+                    <h3 className="text-base text-gray-900 dark:text-slate-100 font-medium line-clamp-2 h-12 overflow-hidden leading-snug group-hover/title:text-gray-600 dark:group-hover/title:text-slate-400 transition-colors">
                       {gig.title}
                     </h3>
                   </Link>
@@ -197,13 +197,13 @@ export default function TrendingGigs() {
                   {/* Rating & Price */}
                   <div className="flex items-center justify-between mt-auto">
                     <div className="flex items-center gap-1">
-                      <Star className="w-4 h-4 text-black fill-black" />
-                      <span className="text-sm font-medium text-gray-900">{gig.rating}</span>
-                      <span className="text-sm text-gray-500">({gig.reviews.toLocaleString()})</span>
+                      <Star className="w-4 h-4 text-black dark:text-amber-400 fill-black dark:fill-amber-400" />
+                      <span className="text-sm font-medium text-gray-900 dark:text-slate-100">{gig.rating}</span>
+                      <span className="text-sm text-gray-500 dark:text-slate-400">({gig.reviews.toLocaleString()})</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs text-gray-500">From</span>
-                      <p className="text-base font-semibold text-gray-900">${gig.price}</p>
+                      <span className="text-xs text-gray-500 dark:text-slate-400">From</span>
+                      <p className="text-base font-semibold text-gray-900 dark:text-slate-100">${gig.price}</p>
                     </div>
                   </div>
                 </div>

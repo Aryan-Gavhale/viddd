@@ -27,10 +27,25 @@ export function validateBody(schema: ObjectSchema) {
     for (const [key, value] of Object.entries(rawBody)) {
       if (DANGEROUS_KEYS.has(key)) continue;
       if (typeof value === "string") {
-        try {
-          const parsed = JSON.parse(value) as unknown;
-          parsedBody[key] = sanitizeObject(parsed) as string | Record<string, unknown> | unknown[];
-        } catch {
+        // Auto-parse only obvious JSON shapes (objects / arrays). Without
+        // this guard a numeric-looking string like "506775" (a TOTP code)
+        // would JSON.parse to the number 506775 and break Joi.string()
+        // validators downstream.
+        const trimmed = value.trim();
+        const looksLikeJson =
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"));
+        if (looksLikeJson) {
+          try {
+            const parsed = JSON.parse(value) as unknown;
+            parsedBody[key] = sanitizeObject(parsed) as
+              | string
+              | Record<string, unknown>
+              | unknown[];
+          } catch {
+            parsedBody[key] = value;
+          }
+        } else {
           parsedBody[key] = value;
         }
       } else {

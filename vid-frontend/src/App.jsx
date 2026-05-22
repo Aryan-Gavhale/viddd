@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { selectUser } from './redux/userSlice';
 import Navbar from './Components/Navbar/Navbar';
 import Footer from './Components/Footer';
@@ -132,30 +133,32 @@ function PageSuspense({ children, skeleton }) {
 }
 
 function FullPageLoader() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600" />
-        <p className="text-gray-500 text-sm">Loading...</p>
+        <p className="text-gray-500 text-sm">{t("common.loading", "Loading…")}</p>
       </div>
     </div>
   );
 }
 
 function RouteErrorFallback({ error, reset }) {
+  const { t } = useTranslation();
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-8">
       <div className="text-center max-w-md">
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">Page Error</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">{t("routes.pageError", "Page Error")}</h2>
         <p className="text-gray-500 mb-4">
-          {import.meta.env.DEV ? error?.message : "This page encountered an error."}
+          {import.meta.env.DEV ? error?.message : t("routes.pageErrorBody", "This page encountered an error.")}
         </p>
         <div className="flex gap-3 justify-center">
           <button onClick={reset} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            Retry
+            {t("common.retry", "Retry")}
           </button>
           <button onClick={() => (window.location.href = "/")} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-            Go home
+            {t("common.goHome", "Go home")}
           </button>
         </div>
       </div>

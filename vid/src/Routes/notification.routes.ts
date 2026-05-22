@@ -8,9 +8,12 @@ import {
   deleteNotification,
   markAllNotificationsAsRead,
   deleteReadNotifications,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 } from "../Controllers/notification.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
+import { notificationPreferencesSchema } from "../Schemas/settings.schemas.js";
 import Joi from "joi";
 
 const createNotificationSchema = Joi.object({
@@ -59,5 +62,15 @@ export default async function routes(fastify: FastifyInstance, _opts: FastifyPlu
   fastify.delete("/:notificationId", {
     preHandler: [authenticateToken],
     handler: wrapHandler(deleteNotification),
+  });
+
+  // ── Settings tab: notification preferences ─────────────────────────────
+  fastify.get("/preferences", {
+    preHandler: [authenticateToken],
+    handler: wrapHandler(getNotificationPreferences),
+  });
+  fastify.patch("/preferences", {
+    preHandler: [authenticateToken, validateBody(notificationPreferencesSchema)],
+    handler: wrapHandler(updateNotificationPreferences),
   });
 }

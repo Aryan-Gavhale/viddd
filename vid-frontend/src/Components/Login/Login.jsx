@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { FcGoogle } from "react-icons/fc";
 import { FaApple, FaEye, FaEyeSlash } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import axiosInstance from "../../utils/axios";
 import { useDispatch } from "react-redux";
 import { setUser } from "../../redux/userSlice";
@@ -33,6 +34,7 @@ function isPathAllowedForRole(path, role) {
 }
 
 export default function Login() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,18 +104,18 @@ export default function Login() {
     }
   };
 
-  const inputBase = "w-full px-4 py-3 rounded-lg border bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 text-sm";
-  const inputOk = "border-gray-300 focus:border-indigo-500 focus:ring-indigo-200";
+  const inputBase = "w-full px-4 py-3 rounded-lg border bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 text-sm";
+  const inputOk = "border-gray-300 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-200 dark:focus:ring-indigo-900/50";
   const inputErr = "border-red-400 focus:border-red-500 focus:ring-red-200";
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950">
       {/* Left panel */}
       <div className="hidden lg:flex w-1/2 relative bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-700 items-center justify-center p-12">
         <div className="max-w-md text-white space-y-6">
-          <h1 className="text-4xl font-bold leading-tight">Welcome back to Vidlancing</h1>
+          <h1 className="text-4xl font-bold leading-tight">{t("auth.loginTitle", "Welcome back to Vidlancing")}</h1>
           <p className="text-indigo-100 text-lg">
-            Pick up where you left off. Your projects, messages, and opportunities are waiting.
+            {t("auth.loginSubtitle", "Pick up where you left off. Your projects, messages, and opportunities are waiting.")}
           </p>
           <div className="grid grid-cols-3 gap-4 pt-4">
             {[
@@ -134,31 +136,31 @@ export default function Login() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-md w-full space-y-6">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Log in</h2>
-            <p className="mt-1 text-gray-500">Enter your credentials to access your account</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">{t("auth.login", "Log in")}</h2>
+            <p className="mt-1 text-gray-500 dark:text-slate-400">{t("auth.loginCredentialsPrompt", "Enter your credentials to access your account")}</p>
           </div>
 
           {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
               <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              <p className="text-red-700 text-sm">{serverError}</p>
+              <p className="text-red-700 dark:text-red-300 text-sm">{serverError}</p>
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
               <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <p className="text-green-700 text-sm font-medium">{success}</p>
+              <p className="text-green-700 dark:text-green-300 text-sm font-medium">{success}</p>
             </div>
           )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{t("auth.email", "Email address")}</label>
               <input
                 id="email"
                 type="email"
@@ -176,8 +178,8 @@ export default function Login() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label htmlFor="password" className="text-sm font-medium text-gray-700">Password</label>
-                <Link to="/password-recovery" className="text-xs text-indigo-600 hover:underline">Forgot password?</Link>
+                <label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-slate-300">{t("auth.password", "Password")}</label>
+                <Link to="/password-recovery" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">{t("auth.forgotPassword", "Forgot password?")}</Link>
               </div>
               <div className="relative">
                 <input
@@ -185,7 +187,7 @@ export default function Login() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   className={`${inputBase} pr-10 ${fieldErrors.password ? inputErr : inputOk}`}
-                  placeholder="Enter your password"
+                  placeholder={t("auth.enterPassword", "Enter your password")}
                   value={formData.password}
                   onChange={(e) => handleChange("password", e.target.value)}
                   onBlur={() => handleBlur("password")}
@@ -194,7 +196,7 @@ export default function Login() {
                 <button
                   type="button"
                   tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
@@ -207,12 +209,12 @@ export default function Login() {
               <input
                 id="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-slate-700 rounded"
                 checked={formData.rememberMe}
                 onChange={(e) => handleChange("rememberMe", e.target.checked)}
                 disabled={loading || !!success}
               />
-              <label htmlFor="remember-me" className="ml-2 text-sm text-gray-600">Remember me</label>
+              <label htmlFor="remember-me" className="ml-2 text-sm text-gray-600 dark:text-slate-400">{t("auth.rememberMe", "Remember me")}</label>
             </div>
 
             <button
@@ -223,34 +225,34 @@ export default function Login() {
               {loading ? (
                 <>
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                  Logging in...
+                  {t("auth.loggingIn", "Logging in…")}
                 </>
               ) : success ? (
-                "Redirecting..."
+                t("auth.redirecting", "Redirecting…")
               ) : (
-                "Log in"
+                t("auth.login", "Log in")
               )}
             </button>
           </form>
 
           {/* Divider */}
           <div className="relative">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center text-sm"><span className="bg-gray-50 px-3 text-gray-400">or continue with</span></div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-slate-700" /></div>
+            <div className="relative flex justify-center text-sm"><span className="bg-gray-50 dark:bg-slate-950 px-3 text-gray-400 dark:text-slate-500">{t("auth.orContinueWith", "or continue with")}</span></div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-sm font-medium text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
               <FcGoogle className="w-5 h-5" /> Google
             </button>
-            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              <FaApple className="w-5 h-5 text-black" /> Apple
+            <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-sm font-medium text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+              <FaApple className="w-5 h-5 text-black dark:text-white" /> Apple
             </button>
           </div>
 
-          <p className="text-center text-sm text-gray-500">
-            Don't have an account?{" "}
-            <Link to="/join" className="text-indigo-600 font-medium hover:underline">Sign up</Link>
+          <p className="text-center text-sm text-gray-500 dark:text-slate-400">
+            {t("auth.noAccount", "Don't have an account?")}{" "}
+            <Link to="/join" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">{t("auth.signup", "Sign up")}</Link>
           </p>
         </div>
       </div>

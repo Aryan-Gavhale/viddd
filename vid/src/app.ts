@@ -294,6 +294,10 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   const { default: emailVerificationRoutes } = await import("./Routes/emailVerification.routes.js");
   const { default: workspaceRoutes } = await import("./Routes/workspace.routes.js");
   const { default: deliveryRoutes } = await import("./Routes/delivery.routes.js");
+  const { default: securityRoutes } = await import("./Routes/security.routes.js");
+  const { default: billingRoutes } = await import("./Routes/billing.routes.js");
+  const { default: connectedAccountsRoutes } = await import("./Routes/connectedAccounts.routes.js");
+  const { default: teamRoutes } = await import("./Routes/team.routes.js");
 
   // ── Auth & Identity ──
   await app.register(userRoutes, { prefix: "/api/v1/users" });
@@ -365,6 +369,12 @@ export async function buildApp(opts: Record<string, unknown> = {}) {
   // ── Admin ──
   await app.register(adminRoutes, { prefix: "/api/v1/admin" });
   await app.register(analyticsRoutes, { prefix: "/api/v1/analytics" });
+
+  // ── Settings (security, billing, OAuth, team) ──
+  await app.register(securityRoutes, { prefix: "/api/v1/security" });
+  await app.register(billingRoutes, { prefix: "/api/v1/billing" });
+  await app.register(connectedAccountsRoutes, { prefix: "/api/v1/connected-accounts" });
+  await app.register(teamRoutes, { prefix: "/api/v1/team" });
 
   // ── External ──
   await app.register(contactRoutes, { prefix: "/api/v1/contact" });

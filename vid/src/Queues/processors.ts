@@ -64,6 +64,74 @@ export async function queueEmail(to: string, subject: string, html: string, text
   await emailQueue.add({ to, subject, html, text });
 }
 
+/**
+ * Email a specific user, respecting their NotificationPreference. The
+ * `category` lets the user opt out per channel; setting `emailFrequency` to
+ * `daily` or `weekly` defers the message to a digest table for the digest
+ * worker to flush. Falls back to instant send if the digest table doesn't
+ * exist (i.e. before the digest worker has been configured) so users still
+ * receive critical messages.
+ */
+export async function queueUserEmail(
+  userId: number,
+  category:
+    | "JOB_INVITATIONS"
+    | "MESSAGES"
+    | "PAYMENT_UPDATES"
+    | "PLATFORM_NEWS"
+    | "MARKETING",
+  subject: string,
+  html: string,
+  text?: string
+): Promise<{ delivered: "now" | "deferred" | "skipped" }> {
+  try {
+    const { resolveNotificationDecision } = await import(
+      "../Controllers/notification.controller.js"
+    );
+    const decision = await resolveNotificationDecision(userId, category);
+    if (!decision.email) return { delivered: "skipped" };
+
+    const userRow = await sqlOne(
+      `SELECT "email" FROM "User" WHERE "id" = $1 AND "isActive" = true AND "deletedAt" IS NULL`,
+      [userId]
+    );
+    const to = userRow?.email ? String(userRow.email) : null;
+    if (!to) return { delivered: "skipped" };
+
+    if (decision.emailFrequency === "instant") {
+      await emailQueue.add({ to, subject, html, text });
+      return { delivered: "now" };
+    }
+
+    // Defer to digest. Only queue if the table exists; otherwise fall back
+    // to instant send so we don't silently drop important emails.
+    try {
+      await sql(
+        `INSERT INTO "EmailDigestQueue" ("userId", "frequency", "subject", "html", "text", "category", "createdAt")
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [userId, decision.emailFrequency, subject, html, text || null, category]
+      );
+      return { delivered: "deferred" };
+    } catch {
+      await emailQueue.add({ to, subject, html, text });
+      return { delivered: "now" };
+    }
+  } catch (err) {
+    logger.warn("queueUserEmail fallthrough: %s", (err as Error).message);
+    // On failure, fall back to direct delivery if we have an email.
+    try {
+      const userRow = await sqlOne(`SELECT "email" FROM "User" WHERE "id" = $1`, [userId]);
+      if (userRow?.email) {
+        await emailQueue.add({ to: String(userRow.email), subject, html, text });
+        return { delivered: "now" };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { delivered: "skipped" };
+  }
+}
+
 export async function queueNotification(data: DirectNotificationJobData): Promise<void> {
   await notificationQueue.add(data);
 }
